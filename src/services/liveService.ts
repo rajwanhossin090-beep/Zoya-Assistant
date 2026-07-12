@@ -5,6 +5,7 @@ import { getSystemInstruction, ZoyaMood } from "./geminiService";
 export class LiveSessionManager {
   private ai: GoogleGenAI;
   private mood: ZoyaMood;
+  private sassLevel: number;
   private sessionPromise: Promise<any> | null = null;
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
@@ -21,8 +22,9 @@ export class LiveSessionManager {
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
 
-  constructor(mood: ZoyaMood = "sassy") {
+  constructor(mood: ZoyaMood = "sassy", sassLevel: number = 50) {
     this.mood = mood;
+    this.sassLevel = sassLevel;
     this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
 
@@ -90,7 +92,7 @@ export class LiveSessionManager {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
           },
-          systemInstruction: getSystemInstruction(this.mood),
+          systemInstruction: getSystemInstruction(this.mood, this.sassLevel),
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           tools: [{

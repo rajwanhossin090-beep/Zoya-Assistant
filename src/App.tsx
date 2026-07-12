@@ -110,6 +110,11 @@ export default function App() {
     return (saved as ZoyaMood) || "sassy";
   });
 
+  const [sassLevel, setSassLevel] = useState<number>(() => {
+    const saved = localStorage.getItem("zoya_sass_level");
+    return saved !== null ? parseInt(saved, 10) : 50;
+  });
+
   const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(() => {
     const saved = localStorage.getItem("zoya_wake_word_enabled");
     return saved !== "false";
@@ -129,6 +134,7 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("zoya_mood", zoyaMood);
+    localStorage.setItem("zoya_sass_level", String(sassLevel));
     resetZoyaSession();
     if (isSessionActive && liveSessionRef.current) {
       liveSessionRef.current.stop();
@@ -136,7 +142,7 @@ export default function App() {
       setIsSessionActive(false);
       setAppState("idle");
     }
-  }, [zoyaMood]);
+  }, [zoyaMood, sassLevel]);
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -195,7 +201,7 @@ export default function App() {
       }, 1500);
     } else {
       // 2. General Chit-Chat via Gemini
-      responseText = await getZoyaResponse(finalTranscript, messagesRef.current, zoyaMood);
+      responseText = await getZoyaResponse(finalTranscript, messagesRef.current, zoyaMood, sassLevel);
       setMessages((prev) => [...prev, { id: Date.now().toString() + "-z", sender: "zoya", text: responseText }]);
       
       if (!isMuted) {
@@ -207,7 +213,7 @@ export default function App() {
       }
       setAppState("idle");
     }
-  }, [isMuted, isSessionActive, zoyaMood]);
+  }, [isMuted, isSessionActive, zoyaMood, sassLevel]);
 
   useEffect(() => {
     return () => {
@@ -231,7 +237,7 @@ export default function App() {
         setIsSessionActive(true);
         resetZoyaSession();
         
-        const session = new LiveSessionManager(zoyaMood);
+        const session = new LiveSessionManager(zoyaMood, sassLevel);
         session.isMuted = isMuted;
         liveSessionRef.current = session;
         
@@ -261,7 +267,7 @@ export default function App() {
         setAppState("idle");
       }
     }
-  }, [isSessionActive, isMuted, zoyaMood]);
+  }, [isSessionActive, isMuted, zoyaMood, sassLevel]);
 
   const toggleListeningRef = useRef(toggleListening);
   useEffect(() => {
@@ -604,6 +610,41 @@ export default function App() {
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Sass Level Slider */}
+        <div className="flex flex-col items-center gap-1 w-64 pointer-events-auto px-4">
+          <div className="flex justify-between w-full text-[10px] uppercase tracking-widest font-bold transition-colors duration-500">
+            <span className={isLightTheme ? "text-slate-500" : "text-white/30"}>Sass Level Adjustment</span>
+            <span className="text-violet-500 font-bold">{sassLevel}%</span>
+          </div>
+          <div className="flex items-center gap-2 w-full">
+            <span className="text-xs select-none">😇</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={sassLevel}
+              onChange={(e) => setSassLevel(Number(e.target.value))}
+              className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer transition-all duration-300 outline-none
+                ${isLightTheme ? "bg-slate-300 hover:bg-slate-400" : "bg-white/10 hover:bg-white/20"}
+              `}
+              style={{
+                background: isLightTheme
+                  ? `linear-gradient(to right, rgb(124, 58, 237) 0%, rgb(124, 58, 237) ${sassLevel}%, rgb(203, 213, 225) ${sassLevel}%, rgb(203, 213, 225) 100%)`
+                  : `linear-gradient(to right, rgb(139, 92, 246) 0%, rgb(139, 92, 246) ${sassLevel}%, rgba(255, 255, 255, 0.1) ${sassLevel}%, rgba(255, 255, 255, 0.1) 100%)`
+              }}
+            />
+            <span className="text-xs select-none">💅🔥</span>
+          </div>
+          <div className={`text-[10px] font-medium tracking-wide transition-colors duration-500
+            ${isLightTheme ? "text-slate-500" : "text-white/40"}`}
+          >
+            {sassLevel <= 10 ? "Gentle & Sweet 🥺" :
+             sassLevel <= 35 ? "Mild Teasing 😏" :
+             sassLevel <= 65 ? "Charming & Sassy 💅" :
+             sassLevel <= 85 ? "High Drama Diva 🎭" : "Relentless Savagery! 💀🔥"}
           </div>
         </div>
 
