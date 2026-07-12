@@ -103,9 +103,9 @@ export class LiveSessionManager {
                 parameters: {
                   type: Type.OBJECT,
                   properties: {
-                    actionType: { type: Type.STRING, description: "Type of action: 'open', 'youtube', 'spotify', 'whatsapp'" },
-                    query: { type: Type.STRING, description: "The search query, website name, or message content." },
-                    target: { type: Type.STRING, description: "The target phone number for WhatsApp, if applicable." }
+                    actionType: { type: Type.STRING, description: "Type of action: 'open', 'youtube', 'spotify', 'whatsapp', 'call'" },
+                    query: { type: Type.STRING, description: "The search query, website name, message content, or phone number to dial." },
+                    target: { type: Type.STRING, description: "The target phone number for WhatsApp or Calls, if applicable." }
                   },
                   required: ["actionType", "query"]
                 }
@@ -152,6 +152,9 @@ export class LiveSessionManager {
                     url = `https://open.spotify.com/search/${encodeURIComponent(args.query)}`;
                   } else if (args.actionType === "whatsapp") {
                     url = `https://web.whatsapp.com/send?phone=${args.target || ''}&text=${encodeURIComponent(args.query)}`;
+                  } else if (args.actionType === "call") {
+                    const number = (args.target || args.query || "").replace(/\s+/g, "");
+                    url = `tel:${number}`;
                   } else {
                     const rawQuery = args.query.trim();
                     if (rawQuery.includes(":/") || rawQuery.includes(":")) {

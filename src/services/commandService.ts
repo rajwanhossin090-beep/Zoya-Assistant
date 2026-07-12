@@ -66,5 +66,16 @@ export function processCommand(command: string): {
     };
   }
 
+  // Call / Dial Dialer: "Call [number]" or "Dial [number]"
+  const callMatch = lowerCmd.match(/^(?:call|dial)\s+([\d\+\s]+)$/);
+  if (callMatch) {
+    const number = callMatch[1].replace(/\s+/g, "");
+    return {
+      action: `Opening phone dialer for ${callMatch[1]}...`,
+      url: `tel:${number}`,
+      isBrowserAction: true,
+    };
+  }
+
   return { action: "", isBrowserAction: false };
 }
