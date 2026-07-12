@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers, Smartphone } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers, Smartphone, MessageSquare, Bell, Sparkles, X, Play, Pause, ChevronRight } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood, ZoyaTheme } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
@@ -164,6 +164,32 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("zoya_wake_word_enabled", String(isWakeWordEnabled));
   }, [isWakeWordEnabled]);
+
+  const [isVoiceBubbleEnabled, setIsVoiceBubbleEnabled] = useState<boolean>(() => {
+    return localStorage.getItem("zoya_voice_bubble_enabled") !== "false";
+  });
+  const [lastZoyaMessage, setLastZoyaMessage] = useState<string | null>(null);
+  const [showBubbleNotification, setShowBubbleNotification] = useState<boolean>(false);
+  const [hasNewNotification, setHasNewNotification] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem("zoya_voice_bubble_enabled", String(isVoiceBubbleEnabled));
+  }, [isVoiceBubbleEnabled]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.sender === "zoya") {
+        setLastZoyaMessage(lastMsg.text);
+        setHasNewNotification(true);
+        setShowBubbleNotification(true);
+        const timer = setTimeout(() => {
+          setShowBubbleNotification(false);
+        }, 7000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [messages]);
 
 
 
@@ -617,6 +643,22 @@ export default function App() {
             <span>Background Run {hasBackgroundPermission ? "Allowed" : "Blocked"}</span>
           </button>
           <button
+            onClick={() => setIsVoiceBubbleEnabled(!isVoiceBubbleEnabled)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
+              ${isVoiceBubbleEnabled 
+                ? isLightTheme
+                  ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                  : "bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20" 
+                : isLightTheme
+                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
+                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
+              }`}
+            title="Toggle Voice Chat Notification Bubble"
+          >
+            <Bell size={12} className={isVoiceBubbleEnabled ? "text-amber-500" : ""} />
+            <span>Voice Bubble {isVoiceBubbleEnabled ? "On" : "Off"}</span>
+          </button>
+          <button
             onClick={() => setIsLightTheme(!isLightTheme)}
             className={`p-2 rounded-full border transition-colors mr-2 cursor-pointer
               ${isLightTheme
@@ -895,6 +937,152 @@ export default function App() {
           )}
         </div>
       </footer>
+
+      {isVoiceBubbleEnabled && (
+        <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-3 pointer-events-auto">
+          {/* Notification slide-out popover */}
+          <AnimatePresence>
+            {showBubbleNotification && lastZoyaMessage && (
+              <motion.div
+                initial={{ opacity: 0, x: 20, scale: 0.9 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 20, scale: 0.9 }}
+                className={`mr-3 max-w-[280px] p-4 rounded-2xl shadow-2xl text-xs border backdrop-blur-md relative flex flex-col gap-2
+                  ${isLightTheme 
+                    ? "bg-white/95 border-slate-200 text-slate-800 shadow-slate-200/50" 
+                    : "bg-[#0c0c0e]/95 border-white/10 text-white shadow-black/80"
+                  }`}
+              >
+                {/* Speech Bubble Arrow */}
+                <div className={`absolute right-[-6px] top-6 w-3 h-3 rotate-45 border-r border-t
+                  ${isLightTheme ? "bg-white border-slate-200" : "bg-[#0c0c0e]/95 border-white/10"}`} 
+                />
+
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-amber-500 animate-pulse" />
+                    <span className="font-bold text-[10px] text-violet-500 uppercase tracking-wider">Zoya Notification</span>
+                    {hasNewNotification && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setShowBubbleNotification(false);
+                      setHasNewNotification(false);
+                    }}
+                    className="p-0.5 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 dark:text-white/40 cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+
+                {/* Message body */}
+                <p className="line-clamp-3 leading-relaxed text-slate-600 dark:text-slate-300 font-medium">
+                  {lastZoyaMessage}
+                </p>
+
+                {/* Quick actions inside notification */}
+                <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-slate-100 dark:border-white/5">
+                  <span className="text-[9px] text-slate-400 dark:text-white/30 font-mono">Voice Active</span>
+                  <button
+                    onClick={() => {
+                      setShowBubbleNotification(false);
+                      setHasNewNotification(false);
+                      if (!isSessionActive) {
+                        toggleListening();
+                      }
+                    }}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide transition-all duration-300 cursor-pointer
+                      ${isSessionActive
+                        ? "bg-red-500/20 text-red-500 border border-red-500/30"
+                        : "bg-violet-600 text-white hover:bg-violet-700 hover:scale-105 shadow-md"
+                      }`}
+                  >
+                    {isSessionActive ? "End Session" : "Reply by Voice"}
+                    <ChevronRight size={10} />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Floating Bubble Trigger */}
+          <div className="relative">
+            <motion.button
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (hasNewNotification) {
+                  setShowBubbleNotification(!showBubbleNotification);
+                  setHasNewNotification(false);
+                } else {
+                  toggleListening();
+                }
+              }}
+              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl relative border cursor-pointer select-none transition-colors duration-300
+                ${isLightTheme
+                  ? "bg-white border-slate-200 text-slate-800 hover:bg-slate-50"
+                  : "bg-[#0f0f11] border-white/10 text-white hover:bg-white/5"
+                }`}
+            >
+              {/* Active voice connection concentric rings */}
+              {isSessionActive && (
+                <>
+                  <span className="absolute -inset-2.5 rounded-full border border-violet-500/25 animate-ping duration-1000" />
+                  <span className="absolute -inset-1.5 rounded-full border border-violet-500/40 animate-pulse" />
+                </>
+              )}
+
+              {/* Dynamic waveform visualizer inside bubble */}
+              {isSessionActive && (appState === "speaking" || appState === "listening") ? (
+                <div className="flex items-center gap-0.5 justify-center h-5 w-8">
+                  <span className="w-0.75 h-3 rounded-full animate-bounce bg-violet-500" style={{ animationDelay: "0ms", animationDuration: "0.6s" }} />
+                  <span className="w-0.75 h-5 rounded-full animate-bounce bg-pink-500" style={{ animationDelay: "150ms", animationDuration: "0.8s" }} />
+                  <span className="w-0.75 h-2 rounded-full animate-bounce bg-cyan-500" style={{ animationDelay: "300ms", animationDuration: "0.5s" }} />
+                  <span className="w-0.75 h-4 rounded-full animate-bounce bg-amber-500" style={{ animationDelay: "450ms", animationDuration: "0.7s" }} />
+                </div>
+              ) : (
+                /* Themed avatar / logo icon inside bubble */
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-lg text-white shadow-md transition-all duration-300
+                  ${zoyaTheme === "anime"
+                    ? "bg-gradient-to-tr from-pink-400 to-rose-400"
+                    : zoyaTheme === "enemy"
+                      ? "bg-gradient-to-tr from-red-600 to-neutral-900"
+                      : "bg-gradient-to-tr from-violet-500 to-pink-500"
+                  }`}
+                >
+                  {zoyaTheme === "anime" ? "🌸" : zoyaTheme === "enemy" ? "😈" : "Z"}
+                </div>
+              )}
+
+              {/* State Status dot badge */}
+              <span className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 flex items-center justify-center shadow-md transition-all duration-300
+                ${isLightTheme ? "bg-white border-white text-white" : "bg-[#0f0f11] border-[#0f0f11] text-[#0f0f11]"}`}
+              >
+                {appState === "speaking" ? (
+                  <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                ) : appState === "listening" ? (
+                  <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                ) : appState === "processing" ? (
+                  <Loader2 size={10} className="animate-spin text-amber-500" />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                )}
+              </span>
+
+              {/* Badge for unread voice notification count */}
+              {hasNewNotification && (
+                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md animate-pulse">
+                  NEW
+                </span>
+              )}
+            </motion.button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
