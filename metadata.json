@@ -2,6 +2,11 @@
   "name": "Remix: Zoya - AI Voice Assistant",
   "description": "A sassy, witty, and intelligent Indian female AI voice assistant.",
   "requestFramePermissions": [
-    "microphone"
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

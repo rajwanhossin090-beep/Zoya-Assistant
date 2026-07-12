@@ -151,9 +151,14 @@ export class LiveSessionManager {
                   } else if (args.actionType === "whatsapp") {
                     url = `https://web.whatsapp.com/send?phone=${args.target || ''}&text=${encodeURIComponent(args.query)}`;
                   } else {
-                    let website = args.query.replace(/\s+/g, "");
-                    if (!website.includes(".")) website += ".com";
-                    url = `https://www.${website}`;
+                    const rawQuery = args.query.trim();
+                    if (rawQuery.includes(":/") || rawQuery.includes(":")) {
+                      url = rawQuery;
+                    } else {
+                      let website = rawQuery.replace(/\s+/g, "");
+                      if (!website.includes(".")) website += ".com";
+                      url = `https://www.${website}`;
+                    }
                   }
                   
                   this.onCommand(url);

@@ -186,7 +186,11 @@ export default function App() {
 
       setTimeout(() => {
         if (commandResult.url) {
-          window.open(commandResult.url, "_blank");
+          try {
+            window.open(commandResult.url, "_blank");
+          } catch (err) {
+            console.error("Failed to open URL in a new window:", commandResult.url, err);
+          }
         }
       }, 1500);
     } else {
@@ -241,7 +245,11 @@ export default function App() {
         
         session.onCommand = (url) => {
           setTimeout(() => {
-            window.open(url, "_blank");
+            try {
+              window.open(url, "_blank");
+            } catch (err) {
+              console.error("Failed to open URL in a new window:", url, err);
+            }
           }, 1000);
         };
 
