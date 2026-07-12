@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
 import PermissionModal from "./components/PermissionModal";
+import GoogleDialerPermissionModal from "./components/GoogleDialerPermissionModal";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -124,6 +125,15 @@ export default function App() {
     return localStorage.getItem("zoya_light_theme") === "true";
   });
 
+  const [hasDialerPermission, setHasDialerPermission] = useState<boolean>(() => {
+    return localStorage.getItem("google_dialer_permission") === "true";
+  });
+  const [showDialerPermissionModal, setShowDialerPermissionModal] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("google_dialer_permission", String(hasDialerPermission));
+  }, [hasDialerPermission]);
+
   useEffect(() => {
     localStorage.setItem("zoya_light_theme", String(isLightTheme));
   }, [isLightTheme]);
@@ -192,6 +202,10 @@ export default function App() {
 
       setTimeout(() => {
         if (commandResult.url) {
+          if (commandResult.url.startsWith("tel:") && !hasDialerPermission) {
+            setShowDialerPermissionModal(true);
+            return;
+          }
           try {
             window.open(commandResult.url, "_blank");
           } catch (err) {
@@ -213,7 +227,7 @@ export default function App() {
       }
       setAppState("idle");
     }
-  }, [isMuted, isSessionActive, zoyaMood, sassLevel]);
+  }, [isMuted, isSessionActive, zoyaMood, sassLevel, hasDialerPermission]);
 
   useEffect(() => {
     return () => {
@@ -250,6 +264,10 @@ export default function App() {
         };
         
         session.onCommand = (url) => {
+          if (url.startsWith("tel:") && !hasDialerPermission) {
+            setShowDialerPermissionModal(true);
+            return;
+          }
           setTimeout(() => {
             try {
               window.open(url, "_blank");
@@ -267,7 +285,7 @@ export default function App() {
         setAppState("idle");
       }
     }
-  }, [isSessionActive, isMuted, zoyaMood, sassLevel]);
+  }, [isSessionActive, isMuted, zoyaMood, sassLevel, hasDialerPermission]);
 
   const toggleListeningRef = useRef(toggleListening);
   useEffect(() => {
@@ -389,6 +407,17 @@ export default function App() {
         />
       )}
 
+      {showDialerPermissionModal && (
+        <GoogleDialerPermissionModal 
+          onClose={() => setShowDialerPermissionModal(false)} 
+          onAllow={() => {
+            setHasDialerPermission(true);
+            setShowDialerPermissionModal(false);
+          }}
+          isLightTheme={isLightTheme}
+        />
+      )}
+
       {/* Cinematic Background Gradients */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-500
@@ -472,6 +501,28 @@ export default function App() {
                 <span>'Hey Zoya' Off</span>
               </>
             )}
+          </button>
+          <button
+            onClick={() => {
+              if (hasDialerPermission) {
+                setHasDialerPermission(false);
+              } else {
+                setShowDialerPermissionModal(true);
+              }
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
+              ${hasDialerPermission 
+                ? isLightTheme
+                  ? "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+                  : "bg-violet-500/10 text-violet-300 border-violet-500/30 hover:bg-violet-500/20" 
+                : isLightTheme
+                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
+                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
+              }`}
+            title="Toggle Google Dialer Permission for dialing phone numbers"
+          >
+            <PhoneCall size={12} className={hasDialerPermission ? "text-violet-500" : ""} />
+            <span>Dialer {hasDialerPermission ? "Allowed" : "Blocked"}</span>
           </button>
           <button
             onClick={() => setIsLightTheme(!isLightTheme)}
