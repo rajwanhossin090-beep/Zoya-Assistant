@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download } from "lucide-react";
-import { getZoyaResponse, getZoyaAudio, resetZoyaSession } from "./services/geminiService";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon } from "lucide-react";
+import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
@@ -105,6 +105,39 @@ export default function App() {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
 
+  const [zoyaMood, setZoyaMood] = useState<ZoyaMood>(() => {
+    const saved = localStorage.getItem("zoya_mood");
+    return (saved as ZoyaMood) || "sassy";
+  });
+
+  const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(() => {
+    const saved = localStorage.getItem("zoya_wake_word_enabled");
+    return saved !== "false";
+  });
+
+  const [isLightTheme, setIsLightTheme] = useState<boolean>(() => {
+    return localStorage.getItem("zoya_light_theme") === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("zoya_light_theme", String(isLightTheme));
+  }, [isLightTheme]);
+
+  useEffect(() => {
+    localStorage.setItem("zoya_wake_word_enabled", String(isWakeWordEnabled));
+  }, [isWakeWordEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem("zoya_mood", zoyaMood);
+    resetZoyaSession();
+    if (isSessionActive && liveSessionRef.current) {
+      liveSessionRef.current.stop();
+      liveSessionRef.current = null;
+      setIsSessionActive(false);
+      setAppState("idle");
+    }
+  }, [zoyaMood]);
+
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -158,7 +191,7 @@ export default function App() {
       }, 1500);
     } else {
       // 2. General Chit-Chat via Gemini
-      responseText = await getZoyaResponse(finalTranscript, messagesRef.current);
+      responseText = await getZoyaResponse(finalTranscript, messagesRef.current, zoyaMood);
       setMessages((prev) => [...prev, { id: Date.now().toString() + "-z", sender: "zoya", text: responseText }]);
       
       if (!isMuted) {
@@ -170,7 +203,7 @@ export default function App() {
       }
       setAppState("idle");
     }
-  }, [isMuted, isSessionActive]);
+  }, [isMuted, isSessionActive, zoyaMood]);
 
   useEffect(() => {
     return () => {
@@ -180,7 +213,7 @@ export default function App() {
     };
   }, []);
 
-  const toggleListening = async () => {
+  const toggleListening = useCallback(async () => {
     if (isSessionActive) {
       setIsSessionActive(false);
       if (liveSessionRef.current) {
@@ -194,7 +227,7 @@ export default function App() {
         setIsSessionActive(true);
         resetZoyaSession();
         
-        const session = new LiveSessionManager();
+        const session = new LiveSessionManager(zoyaMood);
         session.isMuted = isMuted;
         liveSessionRef.current = session;
         
@@ -220,7 +253,108 @@ export default function App() {
         setAppState("idle");
       }
     }
-  };
+  }, [isSessionActive, isMuted, zoyaMood]);
+
+  const toggleListeningRef = useRef(toggleListening);
+  useEffect(() => {
+    toggleListeningRef.current = toggleListening;
+  }, [toggleListening]);
+
+  useEffect(() => {
+    if (!isWakeWordEnabled || isSessionActive) {
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("SpeechRecognition is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-IN";
+
+    let isStopping = false;
+
+    recognition.onresult = (event: any) => {
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const result = event.results[i];
+        if (!result.isFinal && event.results.length > i + 1) continue;
+        const text = result[0].transcript.toLowerCase();
+        console.log("Wake word recognition transcript:", text);
+        
+        if (
+          text.includes("hey zoya") || 
+          text.includes("he zoya") || 
+          text.includes("hay zoya") || 
+          text.includes("hai zoya") || 
+          text.includes("okay zoya") || 
+          text.includes("ok zoya") ||
+          text.includes("hi zoya") ||
+          text.includes("hello zoya") ||
+          text.trim() === "zoya"
+        ) {
+          console.log("Wake word 'Hey Zoya' detected!");
+          isStopping = true;
+          recognition.stop();
+          
+          setTimeout(() => {
+            toggleListeningRef.current();
+          }, 300);
+          break;
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      const error = event.error;
+      // "no-speech" and "aborted" are standard, benign behaviors for continuous listening
+      if (error === "no-speech" || error === "aborted") {
+        console.debug(`Wake word listener state: ${error}`);
+        if (error === "aborted") {
+          isStopping = true;
+        }
+        return;
+      }
+      
+      console.error("Wake word recognition error:", error);
+      if (error === "not-allowed" || error === "audio-capture") {
+        isStopping = true;
+      }
+    };
+
+    recognition.onend = () => {
+      if (!isStopping && !isSessionActive && isWakeWordEnabled) {
+        // Small backoff delay to prevent tight error-loops
+        setTimeout(() => {
+          if (!isStopping && !isSessionActive && isWakeWordEnabled) {
+            try {
+              recognition.start();
+            } catch (err) {
+              console.debug("Failed to restart wake word recognition:", err);
+            }
+          }
+        }, 400);
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start wake word recognition:", err);
+    }
+
+    return () => {
+      isStopping = true;
+      try {
+        recognition.stop();
+      } catch (err) {
+        // ignore
+      }
+    };
+  }, [isWakeWordEnabled, isSessionActive]);
 
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,38 +366,110 @@ export default function App() {
   };
 
   return (
-    <div className="h-[100dvh] w-screen bg-[#050505] text-white flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0">
+    <div className={`h-[100dvh] w-screen flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0 transition-colors duration-500
+      ${isLightTheme ? "bg-[#f8fafc] text-slate-900" : "bg-[#050505] text-white"}`}>
       {showPermissionModal && (
         <PermissionModal 
           onClose={() => setShowPermissionModal(false)} 
+          isLightTheme={isLightTheme}
         />
       )}
 
       {/* Cinematic Background Gradients */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-violet-900/20 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-pink-900/20 blur-[120px] rounded-full" />
+        <div className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-500
+          ${isLightTheme ? "opacity-15 grayscale contrast-[1.2]" : "opacity-25"}`} 
+          style={{ backgroundImage: "url('/automobile_bg.jpg')" }} 
+        />
+        <div className={`absolute inset-0 transition-all duration-500
+          ${isLightTheme ? "bg-gradient-to-b from-white/20 via-slate-50/75 to-[#f8fafc]" : "bg-gradient-to-b from-transparent via-[#050505]/65 to-[#050505]"}`} 
+        />
+        <div className={`absolute top-[-20%] left-[-10%] w-[50%] h-[50%] blur-[120px] rounded-full transition-all duration-500
+          ${isLightTheme ? "bg-violet-300/30" : "bg-violet-900/25"}`} 
+        />
+        <div className={`absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] blur-[120px] rounded-full transition-all duration-500
+          ${isLightTheme ? "bg-pink-300/30" : "bg-pink-900/25"}`} 
+        />
       </div>
 
       {/* Header */}
-      <header className="absolute top-0 left-0 w-full flex justify-between items-center z-20 shrink-0 px-6 py-4 md:px-12 md:py-6">
+      <header className="absolute top-0 left-0 w-full flex justify-between items-center z-20 shrink-0 px-6 py-4 md:px-12 md:py-6 animate-fade-in">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-500 to-pink-500 flex items-center justify-center font-bold text-sm">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-500 to-pink-500 flex items-center justify-center font-bold text-sm text-white shadow-md">
             Z
           </div>
-          <h1 className="text-xl font-serif font-medium tracking-wide opacity-90">Zoya</h1>
+          <h1 className={`text-xl font-serif font-semibold tracking-wide transition-colors duration-500
+            ${isLightTheme ? "text-slate-900" : "text-white opacity-90"}`}>Zoya</h1>
         </div>
         <div className="flex items-center gap-2">
+          {window.self !== window.top && (
+            <a
+              href={window.location.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider mr-1 cursor-pointer
+                ${isLightTheme 
+                  ? "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100" 
+                  : "bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 hover:text-white border border-cyan-500/30"
+                }`}
+              title="Open in new tab to grant microphone permission"
+            >
+              <span>Open in New Tab ↗</span>
+            </a>
+          )}
           {showInstallBtn && (
             <button
               onClick={handleInstallClick}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-white border border-violet-500/30 transition-all text-xs font-semibold tracking-wider mr-2 cursor-pointer"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider mr-2 cursor-pointer
+                ${isLightTheme
+                  ? "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+                  : "bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-white border border-violet-500/30"
+                }`}
               title="Install Zoya App"
             >
               <Download size={14} className="animate-bounce" />
               <span>Install App</span>
             </button>
           )}
+          <button
+            onClick={() => setIsWakeWordEnabled(!isWakeWordEnabled)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
+              ${isWakeWordEnabled 
+                ? isLightTheme
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                  : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20" 
+                : isLightTheme
+                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
+                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
+              }`}
+            title="Toggle 'Hey Zoya' voice activation"
+          >
+            {isWakeWordEnabled ? (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span>'Hey Zoya' On</span>
+              </>
+            ) : (
+              <>
+                <span className={`h-2 w-2 rounded-full ${isLightTheme ? "bg-slate-300" : "bg-white/20"}`}></span>
+                <span>'Hey Zoya' Off</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => setIsLightTheme(!isLightTheme)}
+            className={`p-2 rounded-full border transition-colors mr-2 cursor-pointer
+              ${isLightTheme
+                ? "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+              }`}
+            title={isLightTheme ? "Switch to Dark Mode" : "Switch to Light Mode"}
+          >
+            {isLightTheme ? <Moon size={18} className="opacity-80" /> : <Sun size={18} className="opacity-80" />}
+          </button>
           {messages.length > 0 && (
             <button
               onClick={() => {
@@ -272,7 +478,11 @@ export default function App() {
                   resetZoyaSession();
                 }
               }}
-              className="p-2 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-400 transition-colors border border-white/10"
+              className={`p-2 rounded-full border transition-colors mr-2 cursor-pointer
+                ${isLightTheme
+                  ? "bg-slate-100 border-slate-200 text-slate-700 hover:bg-red-50 hover:text-red-600"
+                  : "bg-white/5 border-white/10 text-white hover:bg-red-500/20 hover:text-red-400"
+                }`}
               title="Clear Chat History"
             >
               <Trash2 size={18} className="opacity-70" />
@@ -280,7 +490,11 @@ export default function App() {
           )}
           <button
             onClick={() => setIsMuted(!isMuted)}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+            className={`p-2 rounded-full border transition-colors cursor-pointer
+              ${isLightTheme
+                ? "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+              }`}
             title={isMuted ? "Unmute" : "Mute"}
           >
             {isMuted ? (
@@ -304,7 +518,8 @@ export default function App() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="flex items-center gap-2 text-cyan-300/80 text-sm md:text-base italic font-serif"
+                  className={`flex items-center gap-2 text-sm md:text-base italic font-serif transition-colors duration-500
+                    ${isLightTheme ? "text-sky-700 font-semibold" : "text-cyan-300/80"}`}
                 >
                   <Loader2 size={16} className="animate-spin" />
                   Replying...
@@ -316,7 +531,7 @@ export default function App() {
 
         {/* Center Visualizer (Fixed Full Screen Background) */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-          <Visualizer state={appState} />
+          <Visualizer state={appState} isLightTheme={isLightTheme} />
         </div>
 
         {/* Right Column: User Status */}
@@ -328,9 +543,10 @@ export default function App() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
-                  className="flex items-center gap-2 text-violet-300/80 text-sm md:text-base italic"
+                  className={`flex items-center gap-2 text-sm md:text-base italic transition-colors duration-500
+                    ${isLightTheme ? "text-violet-700 font-semibold" : "text-violet-300/80"}`}
                 >
-                  <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+                  <div className={`w-2 h-2 rounded-full animate-pulse ${isLightTheme ? "bg-violet-600" : "bg-violet-400"}`} />
                   Listening...
                 </motion.div>
               )}
@@ -341,7 +557,48 @@ export default function App() {
       </main>
 
       {/* Controls */}
-      <footer className="absolute bottom-0 left-0 w-full flex flex-col items-center justify-center pb-6 md:pb-8 z-20 shrink-0 gap-4">
+      <footer className="absolute bottom-0 left-0 w-full flex flex-col items-center justify-center pb-6 md:pb-8 z-20 shrink-0 gap-4 animate-fade-in">
+        {/* Mood Selector Segmented Control */}
+        <div className="flex flex-col items-center gap-1.5 pointer-events-auto">
+          <span className={`text-[10px] uppercase tracking-widest font-bold transition-colors duration-500
+            ${isLightTheme ? "text-slate-500" : "text-white/30"}`}>Zoya's Mood</span>
+          <div className={`flex items-center gap-1 border rounded-full p-1 backdrop-blur-md transition-all duration-500
+            ${isLightTheme 
+              ? "bg-slate-200/90 border-slate-300/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]" 
+              : "bg-black/40 border-white/10 shadow-lg"
+            }`}
+          >
+            {(["sassy", "professional", "bubbly"] as ZoyaMood[]).map((mood) => {
+              const isActive = zoyaMood === mood;
+              const label = mood === "sassy" ? "💅 Sassy" : mood === "professional" ? "💼 Professional" : "✨ Bubbly";
+              return (
+                <button
+                  key={mood}
+                  onClick={() => setZoyaMood(mood)}
+                  className={`
+                    relative px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all duration-300 cursor-pointer z-10 select-none
+                    ${isActive 
+                      ? "text-white scale-105 font-bold" 
+                      : isLightTheme 
+                        ? "text-slate-600 hover:text-slate-900" 
+                        : "text-white/40 hover:text-white/80"
+                    }
+                  `}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeMoodBg"
+                      className="absolute inset-0 bg-gradient-to-r from-violet-600 to-pink-600 rounded-full -z-10 shadow-sm"
+                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                    />
+                  )}
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <AnimatePresence>
           {showTextInput && (
             <motion.form 
@@ -349,20 +606,29 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               onSubmit={handleTextSubmit}
-              className="w-full max-w-md flex items-center gap-2 bg-white/5 border border-white/10 rounded-full p-1 pl-4 backdrop-blur-md shadow-2xl"
+              className={`w-full max-w-md flex items-center gap-2 border rounded-full p-1 pl-4 backdrop-blur-md transition-all duration-500
+                ${isLightTheme 
+                  ? "bg-white border-slate-300 text-slate-900 shadow-[0_10px_30px_rgba(0,0,0,0.08)]" 
+                  : "bg-white/5 border-white/10 text-white shadow-2xl"
+                }`}
             >
               <input 
                 type="text"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 placeholder="Type a message to Zoya..."
-                className="flex-1 bg-transparent border-none outline-none text-white placeholder:text-white/30 text-sm"
+                className={`flex-1 bg-transparent border-none outline-none text-sm transition-colors duration-500
+                  ${isLightTheme ? "text-slate-900 placeholder:text-slate-400" : "text-white placeholder:text-white/30"}`}
                 autoFocus
               />
               <button 
                 type="submit"
                 disabled={!textInput.trim()}
-                className="p-2 rounded-full bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:hover:bg-violet-500 transition-colors"
+                className={`p-2 rounded-full transition-colors disabled:opacity-50 cursor-pointer
+                  ${isLightTheme 
+                    ? "bg-violet-600 text-white hover:bg-violet-700 disabled:hover:bg-violet-600" 
+                    : "bg-violet-500 text-white hover:bg-violet-600 disabled:hover:bg-violet-500"
+                  }`}
               >
                 <Send size={16} />
               </button>
@@ -374,11 +640,15 @@ export default function App() {
           <button
             onClick={toggleListening}
             className={`
-              group relative flex items-center gap-3 px-8 py-4 rounded-full font-medium tracking-wide transition-all duration-300 shadow-2xl
+              group relative flex items-center gap-3 px-8 py-4 rounded-full font-semibold tracking-wide transition-all duration-300 shadow-2xl cursor-pointer
               ${
                 isSessionActive
-                  ? "bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30"
-                  : "bg-white/10 text-white border border-white/20 hover:bg-white/20 hover:scale-105"
+                  ? isLightTheme
+                    ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                    : "bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30"
+                  : isLightTheme
+                    ? "bg-slate-900 text-white border border-slate-800 hover:bg-black hover:scale-105"
+                    : "bg-white/10 text-white border border-white/20 hover:bg-white/20 hover:scale-105"
               }
             `}
           >
@@ -398,7 +668,11 @@ export default function App() {
           {!isSessionActive && (
             <button
               onClick={() => setShowTextInput(!showTextInput)}
-              className="p-4 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors shadow-2xl"
+              className={`p-4 rounded-full border transition-colors shadow-2xl cursor-pointer
+                ${isLightTheme
+                  ? "bg-white border-slate-200 hover:bg-slate-50 text-slate-800"
+                  : "bg-white/5 border-white/10 hover:bg-white/10 text-white"
+                }`}
               title="Type instead"
             >
               <Keyboard size={20} className="opacity-70" />
