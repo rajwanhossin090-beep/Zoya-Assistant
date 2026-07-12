@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers, Smartphone } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
@@ -131,6 +131,9 @@ export default function App() {
   const [hasDisplayOverPermission, setHasDisplayOverPermission] = useState<boolean>(() => {
     return localStorage.getItem("google_display_over_permission") === "true";
   });
+  const [hasBackgroundPermission, setHasBackgroundPermission] = useState<boolean>(() => {
+    return localStorage.getItem("google_background_permission") === "true";
+  });
   const [showDialerPermissionModal, setShowDialerPermissionModal] = useState(false);
 
   useEffect(() => {
@@ -140,6 +143,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("google_display_over_permission", String(hasDisplayOverPermission));
   }, [hasDisplayOverPermission]);
+
+  useEffect(() => {
+    localStorage.setItem("google_background_permission", String(hasBackgroundPermission));
+  }, [hasBackgroundPermission]);
 
   useEffect(() => {
     localStorage.setItem("zoya_light_theme", String(isLightTheme));
@@ -421,6 +428,8 @@ export default function App() {
           setHasDialerPermission={setHasDialerPermission}
           hasDisplayOverPermission={hasDisplayOverPermission}
           setHasDisplayOverPermission={setHasDisplayOverPermission}
+          hasBackgroundPermission={hasBackgroundPermission}
+          setHasBackgroundPermission={setHasBackgroundPermission}
           isLightTheme={isLightTheme}
         />
       )}
@@ -552,6 +561,28 @@ export default function App() {
           >
             <Layers size={12} className={hasDisplayOverPermission ? "text-pink-500" : ""} />
             <span>Display Over {hasDisplayOverPermission ? "Allowed" : "Blocked"}</span>
+          </button>
+          <button
+            onClick={() => {
+              if (hasBackgroundPermission) {
+                setHasBackgroundPermission(false);
+              } else {
+                setShowDialerPermissionModal(true);
+              }
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
+              ${hasBackgroundPermission 
+                ? isLightTheme
+                  ? "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100"
+                  : "bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20" 
+                : isLightTheme
+                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
+                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
+              }`}
+            title="Toggle Background Run Permission"
+          >
+            <Smartphone size={12} className={hasBackgroundPermission ? "text-sky-500" : ""} />
+            <span>Background Run {hasBackgroundPermission ? "Allowed" : "Blocked"}</span>
           </button>
           <button
             onClick={() => setIsLightTheme(!isLightTheme)}

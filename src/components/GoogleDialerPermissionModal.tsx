@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { PhoneCall, ShieldAlert, Layers, Check, X } from 'lucide-react';
+import { PhoneCall, ShieldAlert, Layers, Smartphone } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
@@ -8,6 +8,8 @@ interface Props {
   setHasDialerPermission: (val: boolean) => void;
   hasDisplayOverPermission: boolean;
   setHasDisplayOverPermission: (val: boolean) => void;
+  hasBackgroundPermission: boolean;
+  setHasBackgroundPermission: (val: boolean) => void;
   isLightTheme?: boolean;
 }
 
@@ -17,12 +19,15 @@ export default function GoogleDialerPermissionModal({
   setHasDialerPermission,
   hasDisplayOverPermission,
   setHasDisplayOverPermission,
+  hasBackgroundPermission,
+  setHasBackgroundPermission,
   isLightTheme = false 
 }: Props) {
 
   const handleAllowAll = () => {
     setHasDialerPermission(true);
     setHasDisplayOverPermission(true);
+    setHasBackgroundPermission(true);
     onClose();
   };
 
@@ -49,7 +54,7 @@ export default function GoogleDialerPermissionModal({
         
         <h2 className="text-2xl font-serif font-semibold mb-2">Google Dialer Permissions</h2>
         <p className={`text-xs mb-6 leading-relaxed max-w-sm ${isLightTheme ? "text-slate-500" : "text-white/60"}`}>
-          Zoya needs the following system permissions to assist with placing voice calls and displaying call controls.
+          Zoya needs the following system permissions to assist with placing voice calls, running in the background, and displaying call controls.
         </p>
 
         {/* Permission Toggles Container */}
@@ -132,6 +137,47 @@ export default function GoogleDialerPermissionModal({
               </div>
               <p className={`text-[11px] mt-1 leading-relaxed ${isLightTheme ? "text-slate-500" : "text-white/55"}`}>
                 Allows Google Dialer to display calling interface and floating assist cards over other active applications.
+              </p>
+            </div>
+          </div>
+
+          {/* Background Run Permission Item */}
+          <div 
+            onClick={() => setHasBackgroundPermission(!hasBackgroundPermission)}
+            className={`border rounded-2xl p-4 text-left w-full transition-all duration-300 cursor-pointer select-none flex items-start gap-3
+              ${hasBackgroundPermission
+                ? isLightTheme 
+                  ? "bg-sky-50/50 border-sky-200 shadow-sm" 
+                  : "bg-sky-500/5 border-sky-500/30 shadow-sm"
+                : isLightTheme 
+                  ? "bg-slate-50 border-slate-200 hover:bg-slate-100" 
+                  : "bg-white/2 border-white/5 hover:bg-white/5"
+              }`}
+          >
+            <div className={`p-2 rounded-xl mt-0.5
+              ${hasBackgroundPermission
+                ? isLightTheme ? "bg-sky-100 text-sky-700" : "bg-sky-500/20 text-sky-300"
+                : isLightTheme ? "bg-slate-200 text-slate-500" : "bg-white/5 text-white/40"
+              }`}
+            >
+              <Smartphone size={18} />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <span className={`text-sm font-semibold ${isLightTheme ? "text-slate-800" : "text-white/90"}`}>
+                  Background Run Permission
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wider
+                  ${hasBackgroundPermission
+                    ? "bg-emerald-500/10 text-emerald-500"
+                    : "bg-amber-500/10 text-amber-500"
+                  }`}
+                >
+                  {hasBackgroundPermission ? "Allowed" : "Not Allowed"}
+                </span>
+              </div>
+              <p className={`text-[11px] mt-1 leading-relaxed ${isLightTheme ? "text-slate-500" : "text-white/55"}`}>
+                Allows Zoya to run in the mobile background, enabling hands-free wake words and voice triggers even when the screen is off or another app is open.
               </p>
             </div>
           </div>
