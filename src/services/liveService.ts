@@ -1,11 +1,12 @@
 import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import { processCommand } from "./commandService";
-import { getSystemInstruction, ZoyaMood } from "./geminiService";
+import { getSystemInstruction, ZoyaMood, ZoyaTheme } from "./geminiService";
 
 export class LiveSessionManager {
   private ai: GoogleGenAI;
   private mood: ZoyaMood;
   private sassLevel: number;
+  private theme: ZoyaTheme;
   private sessionPromise: Promise<any> | null = null;
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
@@ -22,9 +23,10 @@ export class LiveSessionManager {
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
 
-  constructor(mood: ZoyaMood = "sassy", sassLevel: number = 50) {
+  constructor(mood: ZoyaMood = "sassy", sassLevel: number = 50, theme: ZoyaTheme = "automobile") {
     this.mood = mood;
     this.sassLevel = sassLevel;
+    this.theme = theme;
     this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
 
@@ -84,15 +86,22 @@ export class LiveSessionManager {
       this.source.connect(this.processor);
       this.processor.connect(this.audioContext.destination);
 
+      // Select prebuilt voice based on theme
+      const themeVoiceName = this.theme === "pretty_female" 
+        ? "Aoede" 
+        : this.theme === "enemy" 
+          ? "Charon" 
+          : "Kore";
+
       // Connect to Live API
       this.sessionPromise = this.ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: themeVoiceName } },
           },
-          systemInstruction: getSystemInstruction(this.mood, this.sassLevel),
+          systemInstruction: getSystemInstruction(this.mood, this.sassLevel, this.theme),
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           tools: [{

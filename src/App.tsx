@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers, Smartphone } from "lucide-react";
-import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood } from "./services/geminiService";
+import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood, ZoyaTheme } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
+import LiveWallpaper from "./components/LiveWallpaper";
 import PermissionModal from "./components/PermissionModal";
 import GoogleDialerPermissionModal from "./components/GoogleDialerPermissionModal";
 import { playPCM } from "./utils/audioUtils";
@@ -111,6 +112,16 @@ export default function App() {
     return (saved as ZoyaMood) || "sassy";
   });
 
+  const [zoyaTheme, setZoyaTheme] = useState<ZoyaTheme>(() => {
+    const saved = localStorage.getItem("zoya_theme");
+    return (saved as ZoyaTheme) || "automobile";
+  });
+
+  const [showStaticBg, setShowStaticBg] = useState<boolean>(() => {
+    const saved = localStorage.getItem("zoya_show_static_bg");
+    return saved !== null ? saved === "true" : true;
+  });
+
   const [sassLevel, setSassLevel] = useState<number>(() => {
     const saved = localStorage.getItem("zoya_sass_level");
     return saved !== null ? parseInt(saved, 10) : 50;
@@ -157,8 +168,13 @@ export default function App() {
   }, [isWakeWordEnabled]);
 
   useEffect(() => {
+    localStorage.setItem("zoya_show_static_bg", String(showStaticBg));
+  }, [showStaticBg]);
+
+  useEffect(() => {
     localStorage.setItem("zoya_mood", zoyaMood);
     localStorage.setItem("zoya_sass_level", String(sassLevel));
+    localStorage.setItem("zoya_theme", zoyaTheme);
     resetZoyaSession();
     if (isSessionActive && liveSessionRef.current) {
       liveSessionRef.current.stop();
@@ -166,7 +182,7 @@ export default function App() {
       setIsSessionActive(false);
       setAppState("idle");
     }
-  }, [zoyaMood, sassLevel]);
+  }, [zoyaMood, sassLevel, zoyaTheme]);
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -206,7 +222,7 @@ export default function App() {
       
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getZoyaAudio(responseText);
+        const audioBase64 = await getZoyaAudio(responseText, zoyaTheme);
         if (audioBase64) {
           await playPCM(audioBase64);
         }
@@ -229,19 +245,19 @@ export default function App() {
       }, 1500);
     } else {
       // 2. General Chit-Chat via Gemini
-      responseText = await getZoyaResponse(finalTranscript, messagesRef.current, zoyaMood, sassLevel);
+      responseText = await getZoyaResponse(finalTranscript, messagesRef.current, zoyaMood, sassLevel, zoyaTheme);
       setMessages((prev) => [...prev, { id: Date.now().toString() + "-z", sender: "zoya", text: responseText }]);
       
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getZoyaAudio(responseText);
+        const audioBase64 = await getZoyaAudio(responseText, zoyaTheme);
         if (audioBase64) {
           await playPCM(audioBase64);
         }
       }
       setAppState("idle");
     }
-  }, [isMuted, isSessionActive, zoyaMood, sassLevel, hasDialerPermission]);
+  }, [isMuted, isSessionActive, zoyaMood, sassLevel, zoyaTheme, hasDialerPermission]);
 
   useEffect(() => {
     return () => {
@@ -265,7 +281,7 @@ export default function App() {
         setIsSessionActive(true);
         resetZoyaSession();
         
-        const session = new LiveSessionManager(zoyaMood, sassLevel);
+        const session = new LiveSessionManager(zoyaMood, sassLevel, zoyaTheme);
         session.isMuted = isMuted;
         liveSessionRef.current = session;
         
@@ -299,7 +315,7 @@ export default function App() {
         setAppState("idle");
       }
     }
-  }, [isSessionActive, isMuted, zoyaMood, sassLevel, hasDialerPermission]);
+  }, [isSessionActive, isMuted, zoyaMood, sassLevel, zoyaTheme, hasDialerPermission]);
 
   const toggleListeningRef = useRef(toggleListening);
   useEffect(() => {
@@ -434,31 +450,61 @@ export default function App() {
         />
       )}
 
-      {/* Cinematic Background Gradients */}
+      {/* Cinematic Background Gradients with Dynamic Live Wallpaper */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-500
-          ${isLightTheme ? "opacity-15 grayscale contrast-[1.2]" : "opacity-25"}`} 
-          style={{ backgroundImage: "url('/automobile_bg.jpg')" }} 
-        />
+        {showStaticBg && (
+          <div className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-500
+            ${isLightTheme ? "opacity-15 grayscale contrast-[1.2]" : "opacity-25"}`} 
+            style={{ 
+              backgroundImage: zoyaTheme === "pretty_female" 
+                ? "url('/rani_bg.jpg')" 
+                : zoyaTheme === "enemy" 
+                  ? "url('/enemy_bg.jpg')" 
+                  : "url('/automobile_bg.jpg')" 
+            }} 
+          />
+        )}
         <div className={`absolute inset-0 transition-all duration-500
           ${isLightTheme ? "bg-gradient-to-b from-white/20 via-slate-50/75 to-[#f8fafc]" : "bg-gradient-to-b from-transparent via-[#050505]/65 to-[#050505]"}`} 
         />
         <div className={`absolute top-[-20%] left-[-10%] w-[50%] h-[50%] blur-[120px] rounded-full transition-all duration-500
-          ${isLightTheme ? "bg-violet-300/30" : "bg-violet-900/25"}`} 
+          ${zoyaTheme === "pretty_female"
+            ? isLightTheme ? "bg-fuchsia-300/30" : "bg-fuchsia-900/25"
+            : zoyaTheme === "enemy"
+              ? isLightTheme ? "bg-red-300/30" : "bg-red-900/25"
+              : isLightTheme ? "bg-violet-300/30" : "bg-violet-900/25"
+          }`} 
         />
         <div className={`absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] blur-[120px] rounded-full transition-all duration-500
-          ${isLightTheme ? "bg-pink-300/30" : "bg-pink-900/25"}`} 
+          ${zoyaTheme === "pretty_female"
+            ? isLightTheme ? "bg-rose-300/30" : "bg-rose-900/25"
+            : zoyaTheme === "enemy"
+              ? isLightTheme ? "bg-neutral-300/30" : "bg-rose-950/25"
+              : isLightTheme ? "bg-pink-300/30" : "bg-pink-900/25"
+          }`} 
         />
+        {/* Responsive, dynamic HTML5 Canvas particle live wallpaper */}
+        <LiveWallpaper theme={zoyaTheme} state={appState} />
       </div>
 
       {/* Header */}
       <header className="absolute top-0 left-0 w-full flex justify-between items-center z-20 shrink-0 px-6 py-4 md:px-12 md:py-6 animate-fade-in">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-500 to-pink-500 flex items-center justify-center font-bold text-sm text-white shadow-md">
-            Z
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-md transition-all duration-500
+            ${zoyaTheme === "pretty_female"
+              ? "bg-gradient-to-tr from-pink-400 to-rose-400"
+              : zoyaTheme === "enemy"
+                ? "bg-gradient-to-tr from-red-600 to-neutral-900"
+                : "bg-gradient-to-tr from-violet-500 to-pink-500"
+            }`}
+          >
+            {zoyaTheme === "pretty_female" ? "👑" : zoyaTheme === "enemy" ? "😈" : "Z"}
           </div>
           <h1 className={`text-xl font-serif font-semibold tracking-wide transition-colors duration-500
-            ${isLightTheme ? "text-slate-900" : "text-white opacity-90"}`}>Zoya</h1>
+            ${isLightTheme ? "text-slate-900" : "text-white opacity-90"}`}
+          >
+            {zoyaTheme === "pretty_female" ? "Rani Zoya" : zoyaTheme === "enemy" ? "Nemesis Zoya" : "Zoya Pro"}
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           {window.self !== window.top && (
@@ -517,6 +563,22 @@ export default function App() {
                 <span>'Hey Zoya' Off</span>
               </>
             )}
+          </button>
+          <button
+            onClick={() => setShowStaticBg(!showStaticBg)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
+              ${showStaticBg 
+                ? isLightTheme
+                  ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                  : "bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/20" 
+                : isLightTheme
+                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
+                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
+              }`}
+            title="Toggle static background image wallpaper"
+          >
+            <Layers size={14} className="opacity-80" />
+            <span>{showStaticBg ? "Background: On" : "Background: Off"}</span>
           </button>
           <button
             onClick={() => {
@@ -656,7 +718,7 @@ export default function App() {
 
         {/* Center Visualizer (Fixed Full Screen Background) */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-          <Visualizer state={appState} isLightTheme={isLightTheme} />
+          <Visualizer state={appState} isLightTheme={isLightTheme} theme={zoyaTheme} />
         </div>
 
         {/* Right Column: User Status */}
@@ -682,10 +744,56 @@ export default function App() {
       </main>
 
       {/* Controls */}
-      <footer className="absolute bottom-0 left-0 w-full flex flex-col items-center justify-center pb-6 md:pb-8 z-20 shrink-0 gap-4 animate-fade-in">
+      <footer className="absolute bottom-0 left-0 w-full flex flex-col items-center justify-center pb-6 md:pb-8 z-20 shrink-0 gap-3.5 animate-fade-in">
+        {/* Theme Selector Segmented Control */}
+        <div className="flex flex-col items-center gap-1 pointer-events-auto">
+          <span className={`text-[9px] uppercase tracking-widest font-bold transition-colors duration-500
+            ${isLightTheme ? "text-slate-500" : "text-white/30"}`}>Visual & AI Theme</span>
+          <div className={`flex items-center gap-1 border rounded-full p-1 backdrop-blur-md transition-all duration-500
+            ${isLightTheme 
+              ? "bg-slate-200/90 border-slate-300/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]" 
+              : "bg-black/40 border-white/10 shadow-lg"
+            }`}
+          >
+            {(["automobile", "pretty_female", "enemy"] as ZoyaTheme[]).map((theme) => {
+              const isActive = zoyaTheme === theme;
+              const label = theme === "automobile" ? "🚗 Original" : theme === "pretty_female" ? "👑 Pretty Female" : "😈 Enemy";
+              const activeThemeBgClass = theme === "pretty_female" 
+                ? "bg-gradient-to-r from-pink-500 to-rose-500"
+                : theme === "enemy" 
+                  ? "bg-gradient-to-r from-red-600 to-red-900 border border-red-500/20"
+                  : "bg-gradient-to-r from-violet-600 to-pink-600";
+              return (
+                <button
+                  key={theme}
+                  onClick={() => setZoyaTheme(theme)}
+                  className={`
+                    relative px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all duration-300 cursor-pointer z-10 select-none
+                    ${isActive 
+                      ? "text-white scale-105 font-bold" 
+                      : isLightTheme 
+                        ? "text-slate-600 hover:text-slate-900" 
+                        : "text-white/40 hover:text-white/80"
+                    }
+                  `}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeThemeBg"
+                      className={`absolute inset-0 rounded-full -z-10 shadow-sm ${activeThemeBgClass}`}
+                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                    />
+                  )}
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Mood Selector Segmented Control */}
-        <div className="flex flex-col items-center gap-1.5 pointer-events-auto">
-          <span className={`text-[10px] uppercase tracking-widest font-bold transition-colors duration-500
+        <div className="flex flex-col items-center gap-1 pointer-events-auto">
+          <span className={`text-[9px] uppercase tracking-widest font-bold transition-colors duration-500
             ${isLightTheme ? "text-slate-500" : "text-white/30"}`}>Zoya's Mood</span>
           <div className={`flex items-center gap-1 border rounded-full p-1 backdrop-blur-md transition-all duration-500
             ${isLightTheme 
@@ -696,6 +804,11 @@ export default function App() {
             {(["sassy", "professional", "bubbly"] as ZoyaMood[]).map((mood) => {
               const isActive = zoyaMood === mood;
               const label = mood === "sassy" ? "💅 Sassy" : mood === "professional" ? "💼 Professional" : "✨ Bubbly";
+              const activeThemeBgClass = zoyaTheme === "pretty_female" 
+                ? "bg-gradient-to-r from-pink-500 to-rose-500"
+                : zoyaTheme === "enemy" 
+                  ? "bg-gradient-to-r from-red-600 to-red-900 border border-red-500/20"
+                  : "bg-gradient-to-r from-violet-600 to-pink-600";
               return (
                 <button
                   key={mood}
@@ -713,7 +826,7 @@ export default function App() {
                   {isActive && (
                     <motion.div
                       layoutId="activeMoodBg"
-                      className="absolute inset-0 bg-gradient-to-r from-violet-600 to-pink-600 rounded-full -z-10 shadow-sm"
+                      className={`absolute inset-0 rounded-full -z-10 shadow-sm ${activeThemeBgClass}`}
                       transition={{ type: "spring", stiffness: 350, damping: 25 }}
                     />
                   )}
@@ -728,7 +841,11 @@ export default function App() {
         <div className="flex flex-col items-center gap-1 w-64 pointer-events-auto px-4">
           <div className="flex justify-between w-full text-[10px] uppercase tracking-widest font-bold transition-colors duration-500">
             <span className={isLightTheme ? "text-slate-500" : "text-white/30"}>Sass Level Adjustment</span>
-            <span className="text-violet-500 font-bold">{sassLevel}%</span>
+            <span className={`transition-all duration-500
+              ${zoyaTheme === "pretty_female" ? "text-pink-500 font-bold" : zoyaTheme === "enemy" ? "text-red-500 font-bold" : "text-violet-500 font-bold"}`}
+            >
+              {sassLevel}%
+            </span>
           </div>
           <div className="flex items-center gap-2 w-full">
             <span className="text-xs select-none">😇</span>
@@ -742,7 +859,15 @@ export default function App() {
                 ${isLightTheme ? "bg-slate-300 hover:bg-slate-400" : "bg-white/10 hover:bg-white/20"}
               `}
               style={{
-                background: isLightTheme
+                background: zoyaTheme === "pretty_female"
+                  ? isLightTheme
+                    ? `linear-gradient(to right, rgb(236, 72, 153) 0%, rgb(236, 72, 153) ${sassLevel}%, rgb(203, 213, 225) ${sassLevel}%, rgb(203, 213, 225) 100%)`
+                    : `linear-gradient(to right, rgb(244, 114, 182) 0%, rgb(244, 114, 182) ${sassLevel}%, rgba(255, 255, 255, 0.1) ${sassLevel}%, rgba(255, 255, 255, 0.1) 100%)`
+                  : zoyaTheme === "enemy"
+                  ? isLightTheme
+                    ? `linear-gradient(to right, rgb(220, 38, 38) 0%, rgb(220, 38, 38) ${sassLevel}%, rgb(203, 213, 225) ${sassLevel}%, rgb(203, 213, 225) 100%)`
+                    : `linear-gradient(to right, rgb(185, 28, 28) 0%, rgb(185, 28, 28) ${sassLevel}%, rgba(255, 255, 255, 0.1) ${sassLevel}%, rgba(255, 255, 255, 0.1) 100%)`
+                  : isLightTheme
                   ? `linear-gradient(to right, rgb(124, 58, 237) 0%, rgb(124, 58, 237) ${sassLevel}%, rgb(203, 213, 225) ${sassLevel}%, rgb(203, 213, 225) 100%)`
                   : `linear-gradient(to right, rgb(139, 92, 246) 0%, rgb(139, 92, 246) ${sassLevel}%, rgba(255, 255, 255, 0.1) ${sassLevel}%, rgba(255, 255, 255, 0.1) 100%)`
               }}
@@ -752,10 +877,16 @@ export default function App() {
           <div className={`text-[10px] font-medium tracking-wide transition-colors duration-500
             ${isLightTheme ? "text-slate-500" : "text-white/40"}`}
           >
-            {sassLevel <= 10 ? "Gentle & Sweet 🥺" :
-             sassLevel <= 35 ? "Mild Teasing 😏" :
-             sassLevel <= 65 ? "Charming & Sassy 💅" :
-             sassLevel <= 85 ? "High Drama Diva 🎭" : "Relentless Savagery! 💀🔥"}
+            {zoyaTheme === "pretty_female" ? (
+              <span>Gentle Royal Whispers 🌸👑</span>
+            ) : zoyaTheme === "enemy" ? (
+              <span>Maximum Rival Hostility! 😈⚔️</span>
+            ) : (
+              sassLevel <= 10 ? "Gentle & Sweet 🥺" :
+              sassLevel <= 35 ? "Mild Teasing 😏" :
+              sassLevel <= 65 ? "Charming & Sassy 💅" :
+              sassLevel <= 85 ? "High Drama Diva 🎭" : "Relentless Savagery! 💀🔥"
+            )}
           </div>
         </div>
 
