@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
@@ -128,11 +128,18 @@ export default function App() {
   const [hasDialerPermission, setHasDialerPermission] = useState<boolean>(() => {
     return localStorage.getItem("google_dialer_permission") === "true";
   });
+  const [hasDisplayOverPermission, setHasDisplayOverPermission] = useState<boolean>(() => {
+    return localStorage.getItem("google_display_over_permission") === "true";
+  });
   const [showDialerPermissionModal, setShowDialerPermissionModal] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("google_dialer_permission", String(hasDialerPermission));
   }, [hasDialerPermission]);
+
+  useEffect(() => {
+    localStorage.setItem("google_display_over_permission", String(hasDisplayOverPermission));
+  }, [hasDisplayOverPermission]);
 
   useEffect(() => {
     localStorage.setItem("zoya_light_theme", String(isLightTheme));
@@ -410,10 +417,10 @@ export default function App() {
       {showDialerPermissionModal && (
         <GoogleDialerPermissionModal 
           onClose={() => setShowDialerPermissionModal(false)} 
-          onAllow={() => {
-            setHasDialerPermission(true);
-            setShowDialerPermissionModal(false);
-          }}
+          hasDialerPermission={hasDialerPermission}
+          setHasDialerPermission={setHasDialerPermission}
+          hasDisplayOverPermission={hasDisplayOverPermission}
+          setHasDisplayOverPermission={setHasDisplayOverPermission}
           isLightTheme={isLightTheme}
         />
       )}
@@ -523,6 +530,28 @@ export default function App() {
           >
             <PhoneCall size={12} className={hasDialerPermission ? "text-violet-500" : ""} />
             <span>Dialer {hasDialerPermission ? "Allowed" : "Blocked"}</span>
+          </button>
+          <button
+            onClick={() => {
+              if (hasDisplayOverPermission) {
+                setHasDisplayOverPermission(false);
+              } else {
+                setShowDialerPermissionModal(true);
+              }
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
+              ${hasDisplayOverPermission 
+                ? isLightTheme
+                  ? "bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100"
+                  : "bg-pink-500/10 text-pink-300 border-pink-500/30 hover:bg-pink-500/20" 
+                : isLightTheme
+                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
+                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
+              }`}
+            title="Toggle Display Over Permission"
+          >
+            <Layers size={12} className={hasDisplayOverPermission ? "text-pink-500" : ""} />
+            <span>Display Over {hasDisplayOverPermission ? "Allowed" : "Blocked"}</span>
           </button>
           <button
             onClick={() => setIsLightTheme(!isLightTheme)}
