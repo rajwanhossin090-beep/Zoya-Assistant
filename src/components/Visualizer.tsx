@@ -49,7 +49,7 @@ export default function Visualizer({ state, isLightTheme = false, theme = "autom
 
   // Theme-specific color palettes
   const getThemeColors = () => {
-    if (theme === "pretty_female") {
+    if (theme === "anime") {
       if (isLightTheme) {
         switch (state) {
           case "listening": return { color: "rgba(219, 39, 119, 1)", glow: "shadow-pink-600/70", border: "border-pink-600/80" }; // pink-600
@@ -104,7 +104,7 @@ export default function Visualizer({ state, isLightTheme = false, theme = "autom
   const themeColors = getThemeColors();
 
   const getCenterText = () => {
-    if (theme === "pretty_female") return "RANI";
+    if (theme === "anime") return "CRIMSON";
     if (theme === "enemy") return "NEMESIS";
     return "ZOYA";
   };

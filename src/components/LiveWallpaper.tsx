@@ -35,7 +35,7 @@ export default function LiveWallpaper({ theme, state }: LiveWallpaperProps) {
 
     let animationFrameId: number;
     let particles: Particle[] = [];
-    const maxParticles = theme === "pretty_female" ? 60 : theme === "enemy" ? 70 : 50;
+    const maxParticles = theme === "enemy" ? 70 : theme === "anime" ? 65 : 50;
 
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
@@ -56,7 +56,7 @@ export default function LiveWallpaper({ theme, state }: LiveWallpaperProps) {
     const createParticle = (initBottom: boolean = false): Particle => {
       const w = canvas.width;
       const h = canvas.height;
-      const size = Math.random() * (theme === "pretty_female" ? 6 : theme === "enemy" ? 4 : 3) + 2;
+      const size = Math.random() * (theme === "enemy" ? 4 : theme === "anime" ? 5 : 3) + 2;
       
       let x = Math.random() * w;
       let y = initBottom ? h + 20 : Math.random() * h;
@@ -71,33 +71,34 @@ export default function LiveWallpaper({ theme, state }: LiveWallpaperProps) {
       const rotation = Math.random() * Math.PI * 2;
       const rotationSpeed = (Math.random() - 0.5) * 0.03;
 
-      if (theme === "pretty_female") {
-        // Pretty Female Theme: Falling Rose Petals and Sparkles
-        const isPetal = Math.random() > 0.4;
+      if (theme === "anime") {
+        // Anime Theme: Falling Sakura Petals & Glowing Crimson/Pink Sparkles
+        const isPetal = Math.random() > 0.45;
         type = isPetal ? "petal" : "sparkle";
-        
+
         // Spawn from top
         if (!initBottom) y = Math.random() * h;
         else y = -20;
-        
+
         speedY = Math.random() * 0.8 + 0.4; // Falls slowly
         speedX = (Math.random() - 0.3) * 0.5; // Slight drift to the right
-        
+
         if (isPetal) {
-          // Beautiful pink/rose colors
+          // Beautiful high-fidelity pink/rose colors to complement the 8K anime image
           const pinks = [
             "rgba(244, 114, 182, 0.75)", // pink-400
             "rgba(251, 113, 133, 0.75)", // rose-400
             "rgba(219, 39, 119, 0.7)",  // pink-600
             "rgba(244, 63, 94, 0.7)",    // rose-500
+            "rgba(225, 29, 72, 0.75)",   // rose-600
           ];
           color = pinks[Math.floor(Math.random() * pinks.length)];
         } else {
-          // Golden/White magic sparkles
+          // Glowing crimson red and soft white sparkles (representing glowing eye energy reflections)
           const sparkles = [
-            "rgba(253, 224, 71, 0.85)",  // yellow-300
-            "rgba(254, 240, 138, 0.9)",  // yellow-200
-            "rgba(255, 255, 255, 0.9)",  // white
+            "rgba(239, 68, 68, 0.85)",   // red-500
+            "rgba(251, 113, 133, 0.9)",  // rose-400
+            "rgba(255, 255, 255, 0.9)",  // pure white highlight
           ];
           color = sparkles[Math.floor(Math.random() * sparkles.length)];
         }
@@ -263,7 +264,7 @@ export default function LiveWallpaper({ theme, state }: LiveWallpaperProps) {
 
       particles.forEach((p, idx) => {
         // Move particle
-        if (theme === "pretty_female") {
+        if (theme === "anime") {
           // Elegant drift with horizontal sine sway
           if (p.swayOffset !== undefined && p.swaySpeed !== undefined && p.swayRange !== undefined) {
             p.swayOffset += p.swaySpeed;
@@ -301,7 +302,7 @@ export default function LiveWallpaper({ theme, state }: LiveWallpaperProps) {
 
         // Check bounds and recycle
         let outOfBounds = false;
-        if (theme === "pretty_female") {
+        if (theme === "anime") {
           if (p.y > canvas.height + 20 || p.x < -20 || p.x > canvas.width + 20) {
             outOfBounds = true;
           }
@@ -335,7 +336,7 @@ export default function LiveWallpaper({ theme, state }: LiveWallpaperProps) {
     <canvas
       ref={canvasRef}
       className="absolute inset-0 w-full h-full pointer-events-none z-0 transition-opacity duration-700"
-      style={{ mixBlendMode: theme === "pretty_female" ? "screen" : "screen" }}
+      style={{ mixBlendMode: "screen" }}
     />
   );
 }

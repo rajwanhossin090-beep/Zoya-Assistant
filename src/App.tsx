@@ -114,13 +114,11 @@ export default function App() {
 
   const [zoyaTheme, setZoyaTheme] = useState<ZoyaTheme>(() => {
     const saved = localStorage.getItem("zoya_theme");
+    if (saved === "pretty_female") return "automobile";
     return (saved as ZoyaTheme) || "automobile";
   });
 
-  const [showStaticBg, setShowStaticBg] = useState<boolean>(() => {
-    const saved = localStorage.getItem("zoya_show_static_bg");
-    return saved !== null ? saved === "true" : true;
-  });
+
 
   const [sassLevel, setSassLevel] = useState<number>(() => {
     const saved = localStorage.getItem("zoya_sass_level");
@@ -167,9 +165,7 @@ export default function App() {
     localStorage.setItem("zoya_wake_word_enabled", String(isWakeWordEnabled));
   }, [isWakeWordEnabled]);
 
-  useEffect(() => {
-    localStorage.setItem("zoya_show_static_bg", String(showStaticBg));
-  }, [showStaticBg]);
+
 
   useEffect(() => {
     localStorage.setItem("zoya_mood", zoyaMood);
@@ -452,23 +448,12 @@ export default function App() {
 
       {/* Cinematic Background Gradients with Dynamic Live Wallpaper */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        {showStaticBg && (
-          <div className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-500
-            ${isLightTheme ? "opacity-15 grayscale contrast-[1.2]" : "opacity-25"}`} 
-            style={{ 
-              backgroundImage: zoyaTheme === "pretty_female" 
-                ? "url('/rani_bg.jpg')" 
-                : zoyaTheme === "enemy" 
-                  ? "url('/enemy_bg.jpg')" 
-                  : "url('/automobile_bg.jpg')" 
-            }} 
-          />
-        )}
+
         <div className={`absolute inset-0 transition-all duration-500
           ${isLightTheme ? "bg-gradient-to-b from-white/20 via-slate-50/75 to-[#f8fafc]" : "bg-gradient-to-b from-transparent via-[#050505]/65 to-[#050505]"}`} 
         />
         <div className={`absolute top-[-20%] left-[-10%] w-[50%] h-[50%] blur-[120px] rounded-full transition-all duration-500
-          ${zoyaTheme === "pretty_female"
+          ${zoyaTheme === "anime"
             ? isLightTheme ? "bg-fuchsia-300/30" : "bg-fuchsia-900/25"
             : zoyaTheme === "enemy"
               ? isLightTheme ? "bg-red-300/30" : "bg-red-900/25"
@@ -476,7 +461,7 @@ export default function App() {
           }`} 
         />
         <div className={`absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] blur-[120px] rounded-full transition-all duration-500
-          ${zoyaTheme === "pretty_female"
+          ${zoyaTheme === "anime"
             ? isLightTheme ? "bg-rose-300/30" : "bg-rose-900/25"
             : zoyaTheme === "enemy"
               ? isLightTheme ? "bg-neutral-300/30" : "bg-rose-950/25"
@@ -491,19 +476,19 @@ export default function App() {
       <header className="absolute top-0 left-0 w-full flex justify-between items-center z-20 shrink-0 px-6 py-4 md:px-12 md:py-6 animate-fade-in">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-md transition-all duration-500
-            ${zoyaTheme === "pretty_female"
+            ${zoyaTheme === "anime"
               ? "bg-gradient-to-tr from-pink-400 to-rose-400"
               : zoyaTheme === "enemy"
                 ? "bg-gradient-to-tr from-red-600 to-neutral-900"
                 : "bg-gradient-to-tr from-violet-500 to-pink-500"
             }`}
           >
-            {zoyaTheme === "pretty_female" ? "👑" : zoyaTheme === "enemy" ? "😈" : "Z"}
+            {zoyaTheme === "anime" ? "🌸" : zoyaTheme === "enemy" ? "😈" : "Z"}
           </div>
           <h1 className={`text-xl font-serif font-semibold tracking-wide transition-colors duration-500
             ${isLightTheme ? "text-slate-900" : "text-white opacity-90"}`}
           >
-            {zoyaTheme === "pretty_female" ? "Rani Zoya" : zoyaTheme === "enemy" ? "Nemesis Zoya" : "Zoya Pro"}
+            {zoyaTheme === "anime" ? "Crimson Zoya" : zoyaTheme === "enemy" ? "Nemesis Zoya" : "Zoya Pro"}
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -564,22 +549,7 @@ export default function App() {
               </>
             )}
           </button>
-          <button
-            onClick={() => setShowStaticBg(!showStaticBg)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
-              ${showStaticBg 
-                ? isLightTheme
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-                  : "bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/20" 
-                : isLightTheme
-                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
-                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
-              }`}
-            title="Toggle static background image wallpaper"
-          >
-            <Layers size={14} className="opacity-80" />
-            <span>{showStaticBg ? "Background: On" : "Background: Off"}</span>
-          </button>
+
           <button
             onClick={() => {
               if (hasDialerPermission) {
@@ -745,52 +715,6 @@ export default function App() {
 
       {/* Controls */}
       <footer className="absolute bottom-0 left-0 w-full flex flex-col items-center justify-center pb-6 md:pb-8 z-20 shrink-0 gap-3.5 animate-fade-in">
-        {/* Theme Selector Segmented Control */}
-        <div className="flex flex-col items-center gap-1 pointer-events-auto">
-          <span className={`text-[9px] uppercase tracking-widest font-bold transition-colors duration-500
-            ${isLightTheme ? "text-slate-500" : "text-white/30"}`}>Visual & AI Theme</span>
-          <div className={`flex items-center gap-1 border rounded-full p-1 backdrop-blur-md transition-all duration-500
-            ${isLightTheme 
-              ? "bg-slate-200/90 border-slate-300/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]" 
-              : "bg-black/40 border-white/10 shadow-lg"
-            }`}
-          >
-            {(["automobile", "pretty_female", "enemy"] as ZoyaTheme[]).map((theme) => {
-              const isActive = zoyaTheme === theme;
-              const label = theme === "automobile" ? "🚗 Original" : theme === "pretty_female" ? "👑 Pretty Female" : "😈 Enemy";
-              const activeThemeBgClass = theme === "pretty_female" 
-                ? "bg-gradient-to-r from-pink-500 to-rose-500"
-                : theme === "enemy" 
-                  ? "bg-gradient-to-r from-red-600 to-red-900 border border-red-500/20"
-                  : "bg-gradient-to-r from-violet-600 to-pink-600";
-              return (
-                <button
-                  key={theme}
-                  onClick={() => setZoyaTheme(theme)}
-                  className={`
-                    relative px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all duration-300 cursor-pointer z-10 select-none
-                    ${isActive 
-                      ? "text-white scale-105 font-bold" 
-                      : isLightTheme 
-                        ? "text-slate-600 hover:text-slate-900" 
-                        : "text-white/40 hover:text-white/80"
-                    }
-                  `}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeThemeBg"
-                      className={`absolute inset-0 rounded-full -z-10 shadow-sm ${activeThemeBgClass}`}
-                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                    />
-                  )}
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Mood Selector Segmented Control */}
         <div className="flex flex-col items-center gap-1 pointer-events-auto">
           <span className={`text-[9px] uppercase tracking-widest font-bold transition-colors duration-500
@@ -804,7 +728,7 @@ export default function App() {
             {(["sassy", "professional", "bubbly"] as ZoyaMood[]).map((mood) => {
               const isActive = zoyaMood === mood;
               const label = mood === "sassy" ? "💅 Sassy" : mood === "professional" ? "💼 Professional" : "✨ Bubbly";
-              const activeThemeBgClass = zoyaTheme === "pretty_female" 
+              const activeThemeBgClass = zoyaTheme === "anime" 
                 ? "bg-gradient-to-r from-pink-500 to-rose-500"
                 : zoyaTheme === "enemy" 
                   ? "bg-gradient-to-r from-red-600 to-red-900 border border-red-500/20"

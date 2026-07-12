@@ -87,10 +87,10 @@ export class LiveSessionManager {
       this.processor.connect(this.audioContext.destination);
 
       // Select prebuilt voice based on theme
-      const themeVoiceName = this.theme === "pretty_female" 
-        ? "Aoede" 
-        : this.theme === "enemy" 
-          ? "Charon" 
+      const themeVoiceName = this.theme === "enemy" 
+        ? "Charon" 
+        : this.theme === "anime"
+          ? "Aoede"
           : "Kore";
 
       // Connect to Live API
