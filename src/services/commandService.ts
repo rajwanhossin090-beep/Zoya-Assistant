@@ -5,6 +5,56 @@ export function processCommand(command: string): {
 } {
   const lowerCmd = command.toLowerCase().trim();
 
+  // 1. JSON Command Parsing (Supports complete, truncated, or incomplete JSON patterns)
+  if (command.trim().startsWith("{") || command.includes('"action"') || command.includes("play_music")) {
+    try {
+      const actionMatch = command.match(/"action"\s*:\s*"([^"]+)"/);
+      const action = actionMatch ? actionMatch[1] : (command.includes("play_music") ? "play_music" : "");
+      
+      if (action === "play_music") {
+        let songName = "";
+        const fullSongMatch = command.match(/"song"\s*:\s*"([^"]+)"/);
+        if (fullSongMatch) {
+          songName = fullSongMatch[1].trim();
+        } else {
+          const partialSongMatch = command.match(/"song"\s*:\s*"?([^"\}]+)/);
+          if (partialSongMatch) {
+            songName = partialSongMatch[1].replace(/[:",]/g, "").trim();
+          }
+        }
+
+        if (songName) {
+          const query = encodeURIComponent(songName);
+          return {
+            action: `Playing "${songName}" on YouTube. Sit back and enjoy, Boss!`,
+            url: `https://www.youtube.com/results?search_query=${query}`,
+            isBrowserAction: true,
+          };
+        } else {
+          return {
+            action: "Arey Boss, you didn't tell me which song to play! Just type or say the song name and I'll find it for you.",
+            isBrowserAction: true,
+          };
+        }
+      }
+    } catch (e) {
+      console.error("Failed to process JSON command:", e);
+    }
+  }
+
+  // 2. Natural language "play [song]" (fallback to YouTube)
+  if (lowerCmd.startsWith("play ") && !lowerCmd.endsWith("on youtube") && !lowerCmd.endsWith("on spotify")) {
+    const song = command.substring(5).trim();
+    if (song) {
+      const query = encodeURIComponent(song);
+      return {
+        action: `Playing "${song}" on YouTube. Sahi choice hai, Boss!`,
+        url: `https://www.youtube.com/results?search_query=${query}`,
+        isBrowserAction: true,
+      };
+    }
+  }
+
   // General Browsing: "Open [website name]"
   const openMatch = lowerCmd.match(/^open\s+(.+)$/);
   if (
@@ -30,8 +80,8 @@ export function processCommand(command: string): {
     };
   }
 
-  // Media Search: "Play [song/video] on YouTube"
-  const ytMatch = lowerCmd.match(/^play\s+(.+?)\s+on\s+youtube$/);
+  // Media Search: "Play / Search [song/video] on YouTube"
+  const ytMatch = lowerCmd.match(/^(?:play|search)\s+(.+?)\s+on\s+youtube$/);
   if (ytMatch) {
     const query = encodeURIComponent(ytMatch[1].trim());
     return {
@@ -41,12 +91,12 @@ export function processCommand(command: string): {
     };
   }
 
-  // Media Search: "Search [query] on Spotify"
-  const spotifyMatch = lowerCmd.match(/^search\s+(.+?)\s+on\s+spotify$/);
+  // Media Search: "Search / Play [query] on Spotify"
+  const spotifyMatch = lowerCmd.match(/^(?:play|search)\s+(.+?)\s+on\s+spotify$/);
   if (spotifyMatch) {
     const query = encodeURIComponent(spotifyMatch[1].trim());
     return {
-      action: `Searching ${spotifyMatch[1]} on Spotify. Hope it's a banger.`,
+      action: `Playing ${spotifyMatch[1]} on Spotify. Hope it's a banger.`,
       url: `https://open.spotify.com/search/${query}`,
       isBrowserAction: true,
     };

@@ -18,10 +18,12 @@ export class LiveSessionManager {
   private nextPlayTime: number = 0;
   private isPlaying: boolean = false;
   public isMuted: boolean = false;
+  private isStopped: boolean = false;
   
   public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
+  public onClose: (error?: any) => void = () => {};
 
   constructor(mood: ZoyaMood = "sassy", sassLevel: number = 50, theme: ZoyaTheme = "automobile") {
     this.mood = mood;
@@ -32,6 +34,7 @@ export class LiveSessionManager {
 
   async start() {
     try {
+      this.isStopped = false;
       this.onStateChange("processing");
       
       // Initialize Audio Contexts
@@ -193,11 +196,24 @@ export class LiveSessionManager {
           },
           onclose: () => {
             console.log("Live API Closed");
+            const wasStopped = this.isStopped;
             this.stop();
+            if (!wasStopped && this.onClose) {
+              this.onClose();
+            }
           },
-          onerror: (err) => {
-            console.error("Live API Error:", err);
+          onerror: (err: any) => {
+            const errMsg = err?.message || String(err);
+            if (errMsg.includes("cancelled") || errMsg.includes("canceled") || errMsg.includes("aborted")) {
+              console.log("Live API connection closed or cancelled gracefully:", errMsg);
+            } else {
+              console.error("Live API Error:", err);
+            }
+            const wasStopped = this.isStopped;
             this.stop();
+            if (!wasStopped && this.onClose) {
+              this.onClose(err);
+            }
           }
         }
       });
@@ -260,27 +276,35 @@ export class LiveSessionManager {
   }
 
   stop() {
+    if (this.isStopped) return;
+    this.isStopped = true;
+
     if (this.processor) {
-      this.processor.disconnect();
+      try { this.processor.disconnect(); } catch (e) {}
       this.processor = null;
     }
     if (this.source) {
-      this.source.disconnect();
+      try { this.source.disconnect(); } catch (e) {}
       this.source = null;
     }
     if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(t => t.stop());
+      try {
+        this.mediaStream.getTracks().forEach(t => t.stop());
+      } catch (e) {}
       this.mediaStream = null;
     }
     if (this.audioContext) {
-      this.audioContext.close();
+      try { this.audioContext.close(); } catch (e) {}
       this.audioContext = null;
     }
     this.stopPlayback();
     
     if (this.sessionPromise) {
-      this.sessionPromise.then(session => session.close()).catch(() => {});
+      const p = this.sessionPromise;
       this.sessionPromise = null;
+      p.then(session => {
+        try { session.close(); } catch (e) {}
+      }).catch(() => {});
     }
     
     this.onStateChange("idle");

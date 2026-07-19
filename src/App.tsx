@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers, Smartphone } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Download, Sun, Moon, PhoneCall, Layers, Smartphone, Youtube, ExternalLink, X, SlidersHorizontal, QrCode, Monitor, Settings, Info, Zap } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession, ZoyaMood, ZoyaTheme } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
@@ -29,6 +29,24 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>("idle");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
+
+  const [useMobileFrame, setUseMobileFrame] = useState<boolean>(() => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    return !isMobile;
+  });
+  const [isMobileDevice, setIsMobileDevice] = useState<boolean>(false);
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkDevice = () => {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+      setIsMobileDevice(isMobile);
+    };
+    checkDevice();
+    window.addEventListener("resize", checkDevice);
+    return () => window.removeEventListener("resize", checkDevice);
+  }, []);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -143,7 +161,97 @@ export default function App() {
   const [hasBackgroundPermission, setHasBackgroundPermission] = useState<boolean>(() => {
     return localStorage.getItem("google_background_permission") === "true";
   });
+  const [launchAppsDirectly, setLaunchAppsDirectly] = useState<boolean>(() => {
+    return localStorage.getItem("zoya_launch_apps_directly") !== "false";
+  });
   const [showDialerPermissionModal, setShowDialerPermissionModal] = useState(false);
+
+  const [activeBrowserAction, setActiveBrowserAction] = useState<{
+    action: string;
+    url: string;
+    songName?: string;
+    type: "youtube" | "spotify" | "whatsapp" | "call" | "open";
+  } | null>(null);
+
+  const triggerBrowserAction = useCallback((url: string, actionText: string) => {
+    if (url.startsWith("tel:") && !hasDialerPermission) {
+      setShowDialerPermissionModal(true);
+      return;
+    }
+
+    let type: "youtube" | "spotify" | "whatsapp" | "call" | "open" = "open";
+    let songName = "";
+
+    if (url.includes("youtube.com")) {
+      type = "youtube";
+      const match = url.match(/search_query=([^&]+)/);
+      if (match) songName = decodeURIComponent(match[1]);
+    } else if (url.includes("spotify.com")) {
+      type = "spotify";
+      const match = url.match(/search\/([^&?]+)/);
+      if (match) songName = decodeURIComponent(match[1]);
+    } else if (url.includes("whatsapp.com")) {
+      type = "whatsapp";
+    } else if (url.startsWith("tel:")) {
+      type = "call";
+    }
+
+    setActiveBrowserAction({
+      action: actionText,
+      url,
+      songName: songName || undefined,
+      type
+    });
+
+    let targetUrl = url;
+    let isNativeScheme = false;
+
+    if (launchAppsDirectly) {
+      if (url.includes("spotify.com")) {
+        const match = url.match(/search\/([^&?]+)/);
+        if (match) {
+          targetUrl = `spotify:search:${match[1]}`;
+          isNativeScheme = true;
+        } else {
+          targetUrl = url.replace("https://open.spotify.com/", "spotify://");
+          isNativeScheme = true;
+        }
+      } else if (url.includes("youtube.com")) {
+        const match = url.match(/search_query=([^&]+)/);
+        if (match) {
+          targetUrl = `youtube://www.youtube.com/results?search_query=${match[1]}`;
+        } else {
+          targetUrl = url.replace("https://www.youtube.com", "youtube://www.youtube.com").replace("https://youtube.com", "youtube://youtube.com");
+        }
+        isNativeScheme = true;
+      } else if (url.includes("whatsapp.com")) {
+        targetUrl = url.replace("https://web.whatsapp.com/", "whatsapp://").replace("https://api.whatsapp.com/", "whatsapp://");
+        isNativeScheme = true;
+      } else if (url.startsWith("tel:")) {
+        isNativeScheme = true;
+      }
+    }
+
+    try {
+      if (launchAppsDirectly && isNativeScheme) {
+        // Direct launch for custom app protocols bypassing browser tabs / pop-up blockers
+        window.location.href = targetUrl;
+        // Auto-dismiss the active action overlay after a short delay since it launched directly
+        setTimeout(() => {
+          setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
+        }, 3000);
+      } else {
+        const newWin = window.open(targetUrl, "_blank");
+        if (newWin) {
+          setTimeout(() => {
+            setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
+          }, 8000);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to open URL:", targetUrl, err);
+    }
+  }, [hasDialerPermission, launchAppsDirectly]);
 
   useEffect(() => {
     localStorage.setItem("google_dialer_permission", String(hasDialerPermission));
@@ -164,6 +272,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("zoya_wake_word_enabled", String(isWakeWordEnabled));
   }, [isWakeWordEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem("zoya_launch_apps_directly", String(launchAppsDirectly));
+  }, [launchAppsDirectly]);
 
 
 
@@ -228,19 +340,9 @@ export default function App() {
 
       setAppState("idle");
 
-      setTimeout(() => {
-        if (commandResult.url) {
-          if (commandResult.url.startsWith("tel:") && !hasDialerPermission) {
-            setShowDialerPermissionModal(true);
-            return;
-          }
-          try {
-            window.open(commandResult.url, "_blank");
-          } catch (err) {
-            console.error("Failed to open URL in a new window:", commandResult.url, err);
-          }
-        }
-      }, 1500);
+      if (commandResult.url) {
+        triggerBrowserAction(commandResult.url, responseText);
+      }
     } else {
       // 2. General Chit-Chat via Gemini
       responseText = await getZoyaResponse(finalTranscript, messagesRef.current, zoyaMood, sassLevel, zoyaTheme);
@@ -291,18 +393,14 @@ export default function App() {
           setMessages((prev) => [...prev, { id: Date.now().toString() + "-" + sender, sender, text }]);
         };
         
+        session.onClose = () => {
+          setIsSessionActive(false);
+          setAppState("idle");
+          liveSessionRef.current = null;
+        };
+        
         session.onCommand = (url) => {
-          if (url.startsWith("tel:") && !hasDialerPermission) {
-            setShowDialerPermissionModal(true);
-            return;
-          }
-          setTimeout(() => {
-            try {
-              window.open(url, "_blank");
-            } catch (err) {
-              console.error("Failed to open URL in a new window:", url, err);
-            }
-          }, 1000);
+          triggerBrowserAction(url, "Command triggered from voice session");
         };
 
         await session.start();
@@ -313,7 +411,7 @@ export default function App() {
         setAppState("idle");
       }
     }
-  }, [isSessionActive, isMuted, zoyaMood, sassLevel, zoyaTheme, hasDialerPermission]);
+  }, [isSessionActive, isMuted, zoyaMood, sassLevel, zoyaTheme, hasDialerPermission, triggerBrowserAction]);
 
   const toggleListeningRef = useRef(toggleListening);
   useEffect(() => {
@@ -425,9 +523,406 @@ export default function App() {
     setShowTextInput(false);
   };
 
-  return (
-    <div className={`h-[100dvh] w-screen flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0 transition-colors duration-500
+  const handleQuickAction = (commandText: string) => {
+    handleTextCommand(commandText);
+    setTextInput("");
+    setShowTextInput(false);
+  };
+
+  const renderQrModal = () => (
+    <AnimatePresence key="qr-modal">
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 pointer-events-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border relative overflow-hidden transition-colors duration-500
+              ${isLightTheme 
+                ? "bg-white border-slate-200 text-slate-900" 
+                : "bg-zinc-950 border-white/10 text-white"
+              }`}
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-pink-500" />
+            
+            <button
+              onClick={() => setShowQrModal(false)}
+              className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors cursor-pointer
+                ${isLightTheme ? "hover:bg-slate-100 text-slate-400 hover:text-slate-600" : "hover:bg-white/10 text-white/40 hover:text-white"}`}
+            >
+              <X size={18} />
+            </button>
+
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4
+              ${isLightTheme ? "bg-violet-50" : "bg-violet-500/10"}`}>
+              <QrCode size={24} className="text-violet-500" />
+            </div>
+
+            <h3 className="text-lg font-serif font-semibold mb-2">Run Zoya on Mobile</h3>
+            <p className={`text-xs mb-5 leading-relaxed px-2 ${isLightTheme ? "text-slate-500" : "text-white/60"}`}>
+              Scan this QR code with your phone camera to run the voice assistant directly on your mobile browser!
+            </p>
+
+            <div className="bg-white p-4 rounded-2xl shadow-inner border border-slate-100 flex items-center justify-center mb-5">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(window.location.href)}`}
+                alt="Scan QR Code"
+                className="w-48 h-48 select-none pointer-events-none"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[10px] opacity-50 mb-6 bg-slate-500/5 px-3 py-1.5 rounded-full">
+              <Info size={11} />
+              <span>Ensure phone and computer are on same network</span>
+            </div>
+
+            <button
+              onClick={() => setShowQrModal(false)}
+              className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl text-xs transition-colors shadow-lg cursor-pointer"
+            >
+              Done
+            </button>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+
+  const renderSettingsModal = () => (
+    <AnimatePresence key="settings-modal">
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 pointer-events-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className={`w-full max-w-md rounded-3xl p-6 shadow-2xl flex flex-col relative overflow-hidden border transition-colors duration-500
+              ${isLightTheme 
+                ? "bg-white border-slate-200 text-slate-900" 
+                : "bg-[#0b0c10]/95 border-white/10 text-white"
+              }`}
+          >
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-violet-500 via-pink-500 to-red-500" />
+            
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Settings className="text-violet-500" size={20} />
+                <h3 className="text-lg font-serif font-semibold">Zoya Control Center</h3>
+              </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className={`p-1.5 rounded-full transition-colors cursor-pointer
+                  ${isLightTheme ? "hover:bg-slate-100 text-slate-400 hover:text-slate-600" : "hover:bg-white/10 text-white/40 hover:text-white"}`}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className={`text-xs mb-4 ${isLightTheme ? "text-slate-500" : "text-white/40"}`}>
+              Configure system integrations and permissions for full mobile-assistant operations.
+            </p>
+
+            <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
+                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold">Voice Trigger ('Hey Zoya')</span>
+                  <span className="text-[10px] opacity-60">Hands-free microphone detection</span>
+                </div>
+                <button
+                  onClick={() => setIsWakeWordEnabled(!isWakeWordEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 cursor-pointer
+                    ${isWakeWordEnabled ? "bg-emerald-500" : isLightTheme ? "bg-slate-200" : "bg-white/10"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
+                    ${isWakeWordEnabled ? "translate-x-6" : "translate-x-1"}`} 
+                  />
+                </button>
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
+                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    <PhoneCall size={12} className="text-violet-500" />
+                    <span className="text-xs font-semibold">Google Dialer</span>
+                  </div>
+                  <span className="text-[10px] opacity-60">Allows hands-free phone calls</span>
+                </div>
+                <button
+                  onClick={() => {
+                    if (hasDialerPermission) {
+                      setHasDialerPermission(false);
+                    } else {
+                      setShowSettingsModal(false);
+                      setShowDialerPermissionModal(true);
+                    }
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 cursor-pointer
+                    ${hasDialerPermission ? "bg-violet-600" : isLightTheme ? "bg-slate-200" : "bg-white/10"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
+                    ${hasDialerPermission ? "translate-x-6" : "translate-x-1"}`} 
+                  />
+                </button>
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
+                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    <Layers size={12} className="text-pink-500" />
+                    <span className="text-xs font-semibold">Display Over Other Apps</span>
+                  </div>
+                  <span className="text-[10px] opacity-60">Enables dynamic voice HUD</span>
+                </div>
+                <button
+                  onClick={() => {
+                    if (hasDisplayOverPermission) {
+                      setHasDisplayOverPermission(false);
+                    } else {
+                      setShowSettingsModal(false);
+                      setShowDialerPermissionModal(true);
+                    }
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 cursor-pointer
+                    ${hasDisplayOverPermission ? "bg-pink-500" : isLightTheme ? "bg-slate-200" : "bg-white/10"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
+                    ${hasDisplayOverPermission ? "translate-x-6" : "translate-x-1"}`} 
+                  />
+                </button>
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
+                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    <Smartphone size={12} className="text-sky-500" />
+                    <span className="text-xs font-semibold">Background Wake Word</span>
+                  </div>
+                  <span className="text-[10px] opacity-60">Keep wake word alive when minimized</span>
+                </div>
+                <button
+                  onClick={() => {
+                    if (hasBackgroundPermission) {
+                      setHasBackgroundPermission(false);
+                    } else {
+                      setShowSettingsModal(false);
+                      setShowDialerPermissionModal(true);
+                    }
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 cursor-pointer
+                    ${hasBackgroundPermission ? "bg-sky-500" : isLightTheme ? "bg-slate-200" : "bg-white/10"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
+                    ${hasBackgroundPermission ? "translate-x-6" : "translate-x-1"}`} 
+                  />
+                </button>
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
+                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    <Zap size={12} className="text-amber-500" />
+                    <span className="text-xs font-semibold">Direct App Launch</span>
+                  </div>
+                  <span className="text-[10px] opacity-60">Launch native apps (Spotify, YouTube, WhatsApp) directly, bypassing Chrome tabs</span>
+                </div>
+                <button
+                  onClick={() => setLaunchAppsDirectly(!launchAppsDirectly)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 cursor-pointer
+                    ${launchAppsDirectly ? "bg-amber-500" : isLightTheme ? "bg-slate-200" : "bg-white/10"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
+                    ${launchAppsDirectly ? "translate-x-6" : "translate-x-1"}`} 
+                  />
+                </button>
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
+                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold">Visual Interface Theme</span>
+                  <span className="text-[10px] opacity-60">Choose between light & dark layouts</span>
+                </div>
+                <button
+                  onClick={() => setIsLightTheme(!isLightTheme)}
+                  className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center
+                    ${isLightTheme 
+                      ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-100" 
+                      : "bg-[#111] border-white/10 text-white hover:bg-white/5"}`}
+                >
+                  {isLightTheme ? <Moon size={16} /> : <Sun size={16} />}
+                </button>
+              </div>
+
+              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
+                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold">Zoya Voice Audio</span>
+                  <span className="text-[10px] opacity-60">Toggle verbal speech feedback</span>
+                </div>
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center
+                    ${isLightTheme 
+                      ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-100" 
+                      : "bg-[#111] border-white/10 text-white hover:bg-white/5"}`}
+                >
+                  {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                </button>
+              </div>
+
+              {messages.length > 0 && (
+                <div className={`flex items-center justify-between p-3 rounded-2xl border border-red-500/10 transition-all
+                  ${isLightTheme ? "bg-red-50/30" : "bg-red-950/10"}`}>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-red-500">Reset Session History</span>
+                    <span className="text-[10px] opacity-50">Wipe dialogue logs and clear context</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm("Are you sure you want to clear the chat history?")) {
+                        setMessages([]);
+                        resetZoyaSession();
+                        setShowSettingsModal(false);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-[11px] transition-colors cursor-pointer shadow-md"
+                  >
+                    Clear Chat
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-white/5 flex flex-col gap-2">
+              {!isMobileDevice && (
+                <button
+                  onClick={() => {
+                    setShowSettingsModal(false);
+                    setShowQrModal(true);
+                  }}
+                  className="w-full py-2.5 bg-gradient-to-r from-violet-600 to-pink-600 text-white font-semibold rounded-xl text-xs hover:opacity-95 transition-all text-center flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                >
+                  <Smartphone size={14} />
+                  <span>Run Natively on Physical Mobile Phone</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className={`w-full py-2 text-center text-xs font-semibold rounded-xl transition-all cursor-pointer
+                  ${isLightTheme ? "bg-slate-100 text-slate-700 hover:bg-slate-200" : "bg-white/5 text-white/70 hover:bg-white/10"}`}
+              >
+                Done
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+
+  const renderMainApp = () => (
+    <div className={`h-full w-full flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0 transition-colors duration-500
       ${isLightTheme ? "bg-[#f8fafc] text-slate-900" : "bg-[#050505] text-white"}`}>
+      
+      {/* Floating Action Trigger Fallback Card */}
+      <AnimatePresence>
+        {activeBrowserAction && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="absolute top-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 pointer-events-auto"
+          >
+            <div className={`relative overflow-hidden rounded-2xl border p-4 shadow-2xl backdrop-blur-xl transition-all duration-500
+              ${isLightTheme 
+                ? "bg-white/95 border-slate-200 text-slate-800 shadow-slate-200" 
+                : "bg-[#0b0c10]/90 border-violet-500/30 text-white shadow-violet-950/40"
+              }`}
+            >
+              {/* Glowing Background Accent */}
+              <div className={`absolute top-0 right-0 -mr-8 -mt-8 w-24 h-24 rounded-full blur-2xl opacity-20 pointer-events-none animate-pulse
+                ${activeBrowserAction.type === "youtube" ? "bg-red-500" : activeBrowserAction.type === "spotify" ? "bg-emerald-500" : "bg-violet-500"}`} 
+              />
+              
+              <div className="flex items-center gap-4 relative z-10">
+                {/* Visual Icon Badge */}
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md animate-bounce
+                  ${activeBrowserAction.type === "youtube" 
+                    ? "bg-gradient-to-tr from-red-600 to-rose-500" 
+                    : activeBrowserAction.type === "spotify"
+                      ? "bg-gradient-to-tr from-emerald-500 to-green-600"
+                      : "bg-gradient-to-tr from-violet-600 to-pink-500"
+                  }`}
+                >
+                  {activeBrowserAction.type === "youtube" ? (
+                    <Youtube size={22} />
+                  ) : activeBrowserAction.type === "spotify" ? (
+                    <span className="text-lg font-bold">🎵</span>
+                  ) : (
+                    <ExternalLink size={20} />
+                  )}
+                </div>
+
+                {/* Text Description */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider
+                      ${activeBrowserAction.type === "youtube" ? "text-red-500" : activeBrowserAction.type === "spotify" ? "text-emerald-500" : "text-violet-500"}`}
+                    >
+                      {activeBrowserAction.type === "youtube" ? "YouTube Music" : activeBrowserAction.type === "spotify" ? "Spotify Search" : "Browser Link"}
+                    </span>
+                    <span className="text-[10px] opacity-40">• Ready</span>
+                  </div>
+                  <h4 className="text-sm font-semibold truncate leading-snug">
+                    {activeBrowserAction.songName || activeBrowserAction.action || "Opening Link..."}
+                  </h4>
+                  <p className="text-[11px] opacity-60 leading-normal mt-0.5">
+                    Tap Play to listen now! (Bypasses popup blocker)
+                  </p>
+                </div>
+
+                {/* Direct user-click button */}
+                <button
+                  onClick={() => {
+                    try {
+                      window.open(activeBrowserAction.url, "_blank");
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all duration-300 shadow-md cursor-pointer hover:scale-105 select-none
+                    ${activeBrowserAction.type === "youtube"
+                      ? "bg-red-600 hover:bg-red-700 active:bg-red-800"
+                      : activeBrowserAction.type === "spotify"
+                        ? "bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700"
+                        : "bg-violet-600 hover:bg-violet-700 active:bg-violet-800"
+                    }`}
+                >
+                  <span>Play</span>
+                  <ExternalLink size={12} />
+                </button>
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setActiveBrowserAction(null)}
+                  className={`p-1.5 rounded-full transition-colors shrink-0 cursor-pointer
+                    ${isLightTheme ? "hover:bg-slate-100 text-slate-400 hover:text-slate-600" : "hover:bg-white/10 text-white/40 hover:text-white"}`}
+                  title="Dismiss"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {showPermissionModal && (
         <PermissionModal 
           onClose={() => setShowPermissionModal(false)} 
@@ -475,7 +970,7 @@ export default function App() {
       </div>
 
       {/* Header */}
-      <header className="absolute top-0 left-0 w-full flex justify-between items-center z-20 shrink-0 px-6 py-4 md:px-12 md:py-6 animate-fade-in">
+      <header className="absolute top-0 left-0 w-full flex justify-between items-center z-20 shrink-0 px-6 py-4 md:px-12 md:py-6 animate-fade-in pointer-events-auto">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-md transition-all duration-500
             ${zoyaTheme === "anime"
@@ -499,169 +994,28 @@ export default function App() {
               href={window.location.href}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider mr-1 cursor-pointer
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider mr-1 cursor-pointer
                 ${isLightTheme 
                   ? "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100" 
-                  : "bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 hover:text-white border border-cyan-500/30"
+                  : "bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
                 }`}
               title="Open in new tab to grant microphone permission"
             >
-              <span>Open in New Tab ↗</span>
+              <span>Open ↗</span>
             </a>
           )}
-          {showInstallBtn && (
-            <button
-              onClick={handleInstallClick}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider mr-2 cursor-pointer
-                ${isLightTheme
-                  ? "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
-                  : "bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-white border border-violet-500/30"
-                }`}
-              title="Install Zoya App"
-            >
-              <Download size={14} className="animate-bounce" />
-              <span>Install App</span>
-            </button>
-          )}
+          
+          {/* Settings Control Deck Trigger */}
           <button
-            onClick={() => setIsWakeWordEnabled(!isWakeWordEnabled)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
-              ${isWakeWordEnabled 
-                ? isLightTheme
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                  : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20" 
-                : isLightTheme
-                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
-                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
-              }`}
-            title="Toggle 'Hey Zoya' voice activation"
-          >
-            {isWakeWordEnabled ? (
-              <>
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span>'Hey Zoya' On</span>
-              </>
-            ) : (
-              <>
-                <span className={`h-2 w-2 rounded-full ${isLightTheme ? "bg-slate-300" : "bg-white/20"}`}></span>
-                <span>'Hey Zoya' Off</span>
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              if (hasDialerPermission) {
-                setHasDialerPermission(false);
-              } else {
-                setShowDialerPermissionModal(true);
-              }
-            }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
-              ${hasDialerPermission 
-                ? isLightTheme
-                  ? "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
-                  : "bg-violet-500/10 text-violet-300 border-violet-500/30 hover:bg-violet-500/20" 
-                : isLightTheme
-                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
-                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
-              }`}
-            title="Toggle Google Dialer Permission for dialing phone numbers"
-          >
-            <PhoneCall size={12} className={hasDialerPermission ? "text-violet-500" : ""} />
-            <span>Dialer {hasDialerPermission ? "Allowed" : "Blocked"}</span>
-          </button>
-          <button
-            onClick={() => {
-              if (hasDisplayOverPermission) {
-                setHasDisplayOverPermission(false);
-              } else {
-                setShowDialerPermissionModal(true);
-              }
-            }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
-              ${hasDisplayOverPermission 
-                ? isLightTheme
-                  ? "bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100"
-                  : "bg-pink-500/10 text-pink-300 border-pink-500/30 hover:bg-pink-500/20" 
-                : isLightTheme
-                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
-                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
-              }`}
-            title="Toggle Display Over Permission"
-          >
-            <Layers size={12} className={hasDisplayOverPermission ? "text-pink-500" : ""} />
-            <span>Display Over {hasDisplayOverPermission ? "Allowed" : "Blocked"}</span>
-          </button>
-          <button
-            onClick={() => {
-              if (hasBackgroundPermission) {
-                setHasBackgroundPermission(false);
-              } else {
-                setShowDialerPermissionModal(true);
-              }
-            }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold tracking-wider cursor-pointer select-none mr-2
-              ${hasBackgroundPermission 
-                ? isLightTheme
-                  ? "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100"
-                  : "bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20" 
-                : isLightTheme
-                  ? "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 hover:text-slate-600"
-                  : "bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/60"
-              }`}
-            title="Toggle Background Run Permission"
-          >
-            <Smartphone size={12} className={hasBackgroundPermission ? "text-sky-500" : ""} />
-            <span>Background Run {hasBackgroundPermission ? "Allowed" : "Blocked"}</span>
-          </button>
-
-          <button
-            onClick={() => setIsLightTheme(!isLightTheme)}
-            className={`p-2 rounded-full border transition-colors mr-2 cursor-pointer
+            onClick={() => setShowSettingsModal(true)}
+            className={`p-2.5 rounded-full border transition-all cursor-pointer flex items-center justify-center shadow-md hover:scale-105 active:scale-95
               ${isLightTheme
-                ? "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
-                : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+                ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                : "bg-zinc-900/85 border-white/10 text-white hover:bg-zinc-850"
               }`}
-            title={isLightTheme ? "Switch to Dark Mode" : "Switch to Light Mode"}
+            title="System Settings"
           >
-            {isLightTheme ? <Moon size={18} className="opacity-80" /> : <Sun size={18} className="opacity-80" />}
-          </button>
-          {messages.length > 0 && (
-            <button
-              onClick={() => {
-                if (confirm("Are you sure you want to clear the chat history?")) {
-                  setMessages([]);
-                  resetZoyaSession();
-                }
-              }}
-              className={`p-2 rounded-full border transition-colors mr-2 cursor-pointer
-                ${isLightTheme
-                  ? "bg-slate-100 border-slate-200 text-slate-700 hover:bg-red-50 hover:text-red-600"
-                  : "bg-white/5 border-white/10 text-white hover:bg-red-500/20 hover:text-red-400"
-                }`}
-              title="Clear Chat History"
-            >
-              <Trash2 size={18} className="opacity-70" />
-            </button>
-          )}
-          <button
-            onClick={() => setIsMuted(!isMuted)}
-            className={`p-2 rounded-full border transition-colors cursor-pointer
-              ${isLightTheme
-                ? "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
-                : "bg-white/5 border-white/10 text-white hover:bg-white/10"
-              }`}
-            title={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted ? (
-              <VolumeX size={18} className="opacity-70" />
-            ) : (
-              <Volume2 size={18} className="opacity-70" />
-            )}
+            <SlidersHorizontal size={15} />
           </button>
         </div>
       </header>
@@ -819,38 +1173,66 @@ export default function App() {
 
         <AnimatePresence>
           {showTextInput && (
-            <motion.form 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              onSubmit={handleTextSubmit}
-              className={`w-full max-w-md flex items-center gap-2 border rounded-full p-1 pl-4 backdrop-blur-md transition-all duration-500
-                ${isLightTheme 
-                  ? "bg-white border-slate-300 text-slate-900 shadow-[0_10px_30px_rgba(0,0,0,0.08)]" 
-                  : "bg-white/5 border-white/10 text-white shadow-2xl"
-                }`}
-            >
-              <input 
-                type="text"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Type a message to Zoya..."
-                className={`flex-1 bg-transparent border-none outline-none text-sm transition-colors duration-500
-                  ${isLightTheme ? "text-slate-900 placeholder:text-slate-400" : "text-white placeholder:text-white/30"}`}
-                autoFocus
-              />
-              <button 
-                type="submit"
-                disabled={!textInput.trim()}
-                className={`p-2 rounded-full transition-colors disabled:opacity-50 cursor-pointer
+            <div className="w-full max-w-md flex flex-col gap-2.5 items-center">
+              {/* Quick Action Chips */}
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="w-full flex gap-2 overflow-x-auto scrollbar-hide px-1 py-1"
+              >
+                {QUICK_ACTIONS.map((action, idx) => (
+                  <motion.button
+                    key={idx}
+                    type="button"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleQuickAction(action.label)}
+                    className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold border transition-all shadow-sm cursor-pointer
+                      ${isLightTheme 
+                        ? "bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300" 
+                        : "bg-white/5 hover:bg-white/10 border-white/10 text-zinc-300 hover:border-white/20"
+                      }`}
+                  >
+                    <span className="text-xs shrink-0 select-none">{action.icon}</span>
+                    <span className="truncate">{action.label}</span>
+                  </motion.button>
+                ))}
+              </motion.div>
+
+              <motion.form 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                onSubmit={handleTextSubmit}
+                className={`w-full flex items-center gap-2 border rounded-full p-1 pl-4 backdrop-blur-md transition-all duration-500 w-full
                   ${isLightTheme 
-                    ? "bg-violet-600 text-white hover:bg-violet-700 disabled:hover:bg-violet-600" 
-                    : "bg-violet-500 text-white hover:bg-violet-600 disabled:hover:bg-violet-500"
+                    ? "bg-white border-slate-300 text-slate-900 shadow-[0_10px_30px_rgba(0,0,0,0.08)]" 
+                    : "bg-white/5 border-white/10 text-white shadow-2xl"
                   }`}
               >
-                <Send size={16} />
-              </button>
-            </motion.form>
+                <input 
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Type a message to Zoya..."
+                  className={`flex-1 bg-transparent border-none outline-none text-sm transition-colors duration-500
+                    ${isLightTheme ? "text-slate-900 placeholder:text-slate-400" : "text-white placeholder:text-white/30"}`}
+                  autoFocus
+                />
+                <button 
+                  type="submit"
+                  disabled={!textInput.trim()}
+                  className={`p-2 rounded-full transition-colors disabled:opacity-50 cursor-pointer
+                    ${isLightTheme 
+                      ? "bg-violet-600 text-white hover:bg-violet-700 disabled:hover:bg-violet-600" 
+                      : "bg-violet-500 text-white hover:bg-violet-600 disabled:hover:bg-violet-500"
+                    }`}
+                >
+                  <Send size={16} />
+                </button>
+              </motion.form>
+            </div>
           )}
         </AnimatePresence>
 
@@ -898,9 +1280,122 @@ export default function App() {
           )}
         </div>
       </footer>
-
-
-
     </div>
   );
+
+  // Main Return Statement: Determines Fullscreen vs Mobile Device Simulation
+  if (useMobileFrame && !isMobileDevice) {
+    return (
+      <div className={`min-h-screen w-screen flex flex-col items-center justify-center transition-colors duration-500 p-4 select-none relative
+        ${isLightTheme ? "bg-slate-100" : "bg-[#09090b]"}`}
+      >
+        {/* Ambient Blurred Background decoration */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className={`absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-[120px] opacity-25 ${isLightTheme ? 'bg-violet-300' : 'bg-violet-900/30'}`} />
+          <div className={`absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-[120px] opacity-25 ${isLightTheme ? 'bg-pink-300' : 'bg-pink-900/30'}`} />
+        </div>
+
+        {/* Floating Controls Bar */}
+        <div className="flex items-center gap-3 mb-5 z-30 pointer-events-auto">
+          <button
+            onClick={() => setUseMobileFrame(false)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all border cursor-pointer hover:scale-105 active:scale-95
+              ${isLightTheme 
+                ? "bg-white text-slate-700 border-slate-200 hover:bg-slate-50" 
+                : "bg-[#111] text-zinc-300 border-zinc-800 hover:bg-zinc-800"
+              }`}
+            title="Display as full screen application"
+          >
+            <Monitor size={14} />
+            <span>Fullscreen View</span>
+          </button>
+          <button
+            onClick={() => setShowQrModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all border border-violet-500 bg-violet-600 text-white hover:bg-violet-700 cursor-pointer hover:scale-105 active:scale-95"
+            title="Get mobile QR code"
+          >
+            <QrCode size={14} />
+            <span>Open on Phone</span>
+          </button>
+        </div>
+
+        {/* Device Chassis (Meticulously structured iOS / Android style frame) */}
+        <div className={`relative w-[390px] h-[844px] rounded-[55px] border-[12px] shadow-2xl overflow-hidden transition-all duration-500 pointer-events-auto flex flex-col
+          ${isLightTheme 
+            ? "border-slate-850 bg-white shadow-slate-300/80" 
+            : "border-zinc-850 bg-black shadow-black/85"
+          }`}
+        >
+          {/* Top Notch / Camera cutout */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 w-28 h-6 bg-black rounded-full z-50 flex items-center justify-between px-3.5 pointer-events-none">
+            <div className="w-2 h-2 bg-zinc-900 rounded-full border border-zinc-800" />
+            <div className="w-1 h-1 bg-blue-950 rounded-full" />
+          </div>
+
+          {/* Virtual iOS / Android Style Status Bar */}
+          <div className={`absolute top-0 left-0 w-full h-10 px-6 flex justify-between items-center z-45 text-xs font-semibold pointer-events-none transition-colors duration-500
+            ${isLightTheme ? "text-slate-800" : "text-white"}`}
+          >
+            {/* Live Clock time */}
+            <span className="text-[11px] font-bold tracking-tight">
+              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+
+            {/* Status Icons */}
+            <div className="flex items-center gap-1.5 text-[10px]">
+              {/* Signal Strength Bars */}
+              <div className="flex items-end gap-0.5 h-2.5">
+                <div className="w-[2px] h-[30%] bg-current rounded-full" />
+                <div className="w-[2px] h-[50%] bg-current rounded-full" />
+                <div className="w-[2px] h-[75%] bg-current rounded-full" />
+                <div className="w-[2px] h-[100%] bg-current rounded-full" />
+              </div>
+              <span className="font-bold tracking-wider">5G</span>
+              {/* Battery Indicator */}
+              <div className="flex items-center border border-current rounded-sm px-[1.5px] py-[1px] w-5 h-3 opacity-80">
+                <div className="bg-current h-full w-[85%] rounded-2xs" />
+              </div>
+            </div>
+          </div>
+
+          {/* Side chassis button mockups (floating volume/power bezels) */}
+          <div className="absolute left-[-15px] top-32 w-[3px] h-8 bg-zinc-700/50 rounded-l-md z-40 pointer-events-none" />
+          <div className="absolute left-[-15px] top-44 w-[3px] h-12 bg-zinc-700/50 rounded-l-md z-40 pointer-events-none" />
+          <div className="absolute left-[-15px] top-60 w-[3px] h-12 bg-zinc-700/50 rounded-l-md z-40 pointer-events-none" />
+          <div className="absolute right-[-15px] top-40 w-[3px] h-16 bg-zinc-700/50 rounded-r-md z-40 pointer-events-none" />
+
+          {/* Phone Screen Display container */}
+          <div className="flex-1 w-full h-full relative overflow-hidden bg-[#050505]">
+            {renderMainApp()}
+          </div>
+
+          {/* Virtual bottom swipe/Home indicator */}
+          <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-zinc-500/50 rounded-full z-50 pointer-events-none" />
+        </div>
+
+        {/* Modal Modifiers Render */}
+        {renderQrModal()}
+        {renderSettingsModal()}
+      </div>
+    );
+  }
+
+  // Fallback Fullscreen rendering (Default on mobile devices)
+  return (
+    <>
+      {renderMainApp()}
+      {renderQrModal()}
+      {renderSettingsModal()}
+    </>
+  );
 }
+
+const QUICK_ACTIONS = [
+  { label: "What's the weather?", icon: "🌤️" },
+  { label: "Check my schedule", icon: "📅" },
+  { label: "Play some music", icon: "🎵" },
+  { label: "Call Boss", icon: "📞" },
+  { label: "Open Spotify", icon: "🟢" },
+  { label: "Send WhatsApp message", icon: "💬" }
+];
+
