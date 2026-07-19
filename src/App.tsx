@@ -135,6 +135,7 @@ export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [shareMode, setShareMode] = useState<"screen" | "camera" | "none">("none");
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
 
   const [zoyaMood, setZoyaMood] = useState<ZoyaMood>(() => {
     const saved = localStorage.getItem("zoya_mood");
@@ -363,6 +364,7 @@ export default function App() {
       setIsSessionActive(false);
       setIsScreenSharing(false);
       setShareMode("none");
+      setScreenShareError(null);
       if (liveSessionRef.current) {
         liveSessionRef.current.stop();
         liveSessionRef.current = null;
@@ -373,6 +375,7 @@ export default function App() {
       try {
         setIsSessionActive(true);
         resetZoyaSession();
+        setScreenShareError(null);
         
         const session = new LiveSessionManager(zoyaMood, sassLevel, zoyaTheme);
         session.isMuted = isMuted;
@@ -390,6 +393,7 @@ export default function App() {
           setIsSessionActive(false);
           setIsScreenSharing(false);
           setShareMode("none");
+          setScreenShareError(null);
           setAppState("idle");
           liveSessionRef.current = null;
         };
@@ -401,6 +405,9 @@ export default function App() {
         session.onScreenShareActive = (active, mode) => {
           setIsScreenSharing(active);
           setShareMode(mode);
+          if (active) {
+            setScreenShareError(null);
+          }
         };
  
         await session.start();
@@ -410,6 +417,7 @@ export default function App() {
         setIsSessionActive(false);
         setIsScreenSharing(false);
         setShareMode("none");
+        setScreenShareError(null);
         setAppState("idle");
       }
     }
@@ -417,14 +425,29 @@ export default function App() {
 
   const toggleScreenShare = useCallback(async () => {
     if (!liveSessionRef.current) return;
+    setScreenShareError(null);
     try {
       if (isScreenSharing) {
         liveSessionRef.current.stopScreenShare();
       } else {
         await liveSessionRef.current.startScreenShare();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Screen sharing toggle error:", err);
+      const errMsg = err?.message || String(err);
+      
+      if (errMsg.includes("NotAllowedError") || errMsg.includes("PermissionDeniedError") || errMsg.includes("denied") || errMsg.includes("dismissed") || errMsg.includes("dismissal")) {
+        setScreenShareError("Permission dismissed or denied. Please grant screen/camera permissions to share your screen.");
+      } else if (errMsg.includes("mediaDevices") || errMsg.includes("not a function")) {
+        setScreenShareError("Screen sharing is not supported on this browser or inside the preview iframe. Open in a new tab to grant permissions!");
+      } else {
+        setScreenShareError(errMsg);
+      }
+      
+      // Auto-dismiss the error message after 6 seconds
+      setTimeout(() => {
+        setScreenShareError((prev) => (prev === errMsg || prev?.includes("dismissed") || prev?.includes("iframe") ? null : prev));
+      }, 7000);
     }
   }, [isScreenSharing]);
 
@@ -1066,6 +1089,8 @@ export default function App() {
           sassLevel={sassLevel}
           onSassLevelChange={setSassLevel}
           isScreenSharing={isScreenSharing}
+          shareMode={shareMode}
+          screenShareError={screenShareError}
           onToggleScreenShare={toggleScreenShare}
         />
       );

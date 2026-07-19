@@ -33,6 +33,7 @@ interface GeminiLiveScreenProps {
   onSassLevelChange: (level: number) => void;
   isScreenSharing: boolean;
   shareMode?: "screen" | "camera" | "none";
+  screenShareError?: string | null;
   onToggleScreenShare: () => void;
 }
 
@@ -50,6 +51,7 @@ export default function GeminiLiveScreen({
   onSassLevelChange,
   isScreenSharing,
   shareMode = "none",
+  screenShareError = null,
   onToggleScreenShare,
 }: GeminiLiveScreenProps) {
   const [showQuickSettings, setShowQuickSettings] = useState(false);
@@ -312,6 +314,18 @@ export default function GeminiLiveScreen({
                 Live Screen Share Active
               </>
             )}
+          </motion.div>
+        )}
+
+        {/* Screen sharing error banner */}
+        {screenShareError && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-2 mx-6 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2 max-w-md text-center shadow-md font-medium"
+          >
+            <ShieldAlert size={14} className="text-rose-400 shrink-0" />
+            <span>{screenShareError}</span>
           </motion.div>
         )}
 
