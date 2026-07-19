@@ -177,8 +177,9 @@ export default function App() {
   const [activeBrowserAction, setActiveBrowserAction] = useState<{
     action: string;
     url: string;
+    nativeUrl?: string;
     songName?: string;
-    type: "youtube" | "spotify" | "whatsapp" | "call" | "open";
+    type: "youtube" | "spotify" | "whatsapp" | "call" | "maps" | "open";
   } | null>(null);
 
   const triggerBrowserAction = useCallback((url: string, actionText: string) => {
@@ -187,7 +188,7 @@ export default function App() {
       return;
     }
 
-    let type: "youtube" | "spotify" | "whatsapp" | "call" | "open" = "open";
+    let type: "youtube" | "spotify" | "whatsapp" | "call" | "maps" | "open" = "open";
     let songName = "";
 
     if (url.includes("youtube.com")) {
@@ -202,14 +203,9 @@ export default function App() {
       type = "whatsapp";
     } else if (url.startsWith("tel:")) {
       type = "call";
+    } else if (url.includes("google.com/maps") || url.includes("maps.google.com") || url.includes("maps.app.goo.gl")) {
+      type = "maps";
     }
-
-    setActiveBrowserAction({
-      action: actionText,
-      url,
-      songName: songName || undefined,
-      type
-    });
 
     let targetUrl = url;
     let isNativeScheme = false;
@@ -237,23 +233,44 @@ export default function App() {
         isNativeScheme = true;
       } else if (url.startsWith("tel:")) {
         isNativeScheme = true;
+      } else if (type === "maps") {
+        const queryMatch = url.match(/[?&](query|q)=([^&]+)/);
+        const query = queryMatch ? queryMatch[2] : "";
+        if (query) {
+          targetUrl = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            ? `maps://?q=${query}`
+            : `geo:0,0?q=${query}`;
+        } else {
+          targetUrl = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            ? `maps://`
+            : `geo:0,0`;
+        }
+        isNativeScheme = true;
       }
     }
 
+    setActiveBrowserAction({
+      action: actionText,
+      url,
+      nativeUrl: isNativeScheme ? targetUrl : undefined,
+      songName: songName || undefined,
+      type
+    });
+
     try {
       if (launchAppsDirectly && isNativeScheme) {
-        // Direct launch for custom app protocols bypassing browser tabs / pop-up blockers
+        // Direct launch for custom app protocols
         window.location.href = targetUrl;
-        // Auto-dismiss the active action overlay after a short delay since it launched directly
+        // Keep active browser action overlay visible for a bit longer so user can manually tap if blocked/failed
         setTimeout(() => {
           setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
-        }, 3000);
+        }, 12000);
       } else {
         const newWin = window.open(targetUrl, "_blank");
         if (newWin) {
           setTimeout(() => {
             setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
-          }, 8000);
+          }, 12000);
         }
       }
     } catch (err) {
@@ -1083,7 +1100,15 @@ export default function App() {
             >
               {/* Glowing Background Accent */}
               <div className={`absolute top-0 right-0 -mr-8 -mt-8 w-24 h-24 rounded-full blur-2xl opacity-20 pointer-events-none animate-pulse
-                ${activeBrowserAction.type === "youtube" ? "bg-red-500" : activeBrowserAction.type === "spotify" ? "bg-emerald-500" : "bg-violet-500"}`} 
+                ${activeBrowserAction.type === "youtube" 
+                  ? "bg-red-500" 
+                  : activeBrowserAction.type === "spotify" 
+                    ? "bg-emerald-500" 
+                    : activeBrowserAction.type === "maps"
+                      ? "bg-sky-500"
+                      : activeBrowserAction.type === "whatsapp"
+                        ? "bg-teal-500"
+                        : "bg-violet-500"}`} 
               />
               
               <div className="flex items-center gap-4 relative z-10">
@@ -1093,25 +1118,49 @@ export default function App() {
                     ? "bg-gradient-to-tr from-red-600 to-rose-500" 
                     : activeBrowserAction.type === "spotify"
                       ? "bg-gradient-to-tr from-emerald-500 to-green-600"
-                      : "bg-gradient-to-tr from-violet-600 to-pink-500"
+                      : activeBrowserAction.type === "maps"
+                        ? "bg-gradient-to-tr from-sky-500 to-blue-600"
+                        : activeBrowserAction.type === "whatsapp"
+                          ? "bg-gradient-to-tr from-teal-500 to-emerald-600"
+                          : "bg-gradient-to-tr from-violet-600 to-pink-500"
                   }`}
                 >
                   {activeBrowserAction.type === "youtube" ? (
                     <Youtube size={22} />
                   ) : activeBrowserAction.type === "spotify" ? (
                     <span className="text-lg font-bold">🎵</span>
+                  ) : activeBrowserAction.type === "maps" ? (
+                    <span className="text-lg font-bold">📍</span>
+                  ) : activeBrowserAction.type === "whatsapp" ? (
+                    <span className="text-lg font-bold">💬</span>
                   ) : (
                     <ExternalLink size={20} />
                   )}
                 </div>
-
+                
                 {/* Text Description */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[10px] font-bold uppercase tracking-wider
-                      ${activeBrowserAction.type === "youtube" ? "text-red-500" : activeBrowserAction.type === "spotify" ? "text-emerald-500" : "text-violet-500"}`}
+                      ${activeBrowserAction.type === "youtube" 
+                        ? "text-red-500" 
+                        : activeBrowserAction.type === "spotify" 
+                          ? "text-emerald-500" 
+                          : activeBrowserAction.type === "maps"
+                            ? "text-sky-500"
+                            : activeBrowserAction.type === "whatsapp"
+                              ? "text-teal-500"
+                              : "text-violet-500"}`}
                     >
-                      {activeBrowserAction.type === "youtube" ? "YouTube Music" : activeBrowserAction.type === "spotify" ? "Spotify Search" : "Browser Link"}
+                      {activeBrowserAction.type === "youtube" 
+                        ? "YouTube Music" 
+                        : activeBrowserAction.type === "spotify" 
+                          ? "Spotify" 
+                          : activeBrowserAction.type === "maps"
+                            ? "Google Maps"
+                            : activeBrowserAction.type === "whatsapp"
+                              ? "WhatsApp Web"
+                              : "Assistant Link"}
                     </span>
                     <span className="text-[10px] opacity-40">• Ready</span>
                   </div>
@@ -1119,7 +1168,11 @@ export default function App() {
                     {activeBrowserAction.songName || activeBrowserAction.action || "Opening Link..."}
                   </h4>
                   <p className="text-[11px] opacity-60 leading-normal mt-0.5">
-                    Tap Play to listen now! (Bypasses popup blocker)
+                    {activeBrowserAction.type === "maps" 
+                      ? "Tap Open Map to view direction/location natively" 
+                      : activeBrowserAction.type === "youtube" || activeBrowserAction.type === "spotify"
+                        ? "Tap Play to listen now! (Bypasses popup blocker)"
+                        : "Tap Open to launch the connection"}
                   </p>
                 </div>
 
@@ -1127,9 +1180,33 @@ export default function App() {
                 <button
                   onClick={() => {
                     try {
-                      window.open(activeBrowserAction.url, "_blank");
+                      if (activeBrowserAction.nativeUrl && launchAppsDirectly) {
+                        // Smart native deep link redirect on mobile browsers
+                        const start = Date.now();
+                        let opened = false;
+                        const onBlur = () => { opened = true; };
+                        window.addEventListener("blur", onBlur);
+                        
+                        window.location.href = activeBrowserAction.nativeUrl;
+                        
+                        setTimeout(() => {
+                          window.removeEventListener("blur", onBlur);
+                          if (!opened && (Date.now() - start < 2000)) {
+                            // Deep link failed, fallback to standard web link
+                            window.open(activeBrowserAction.url, "_blank");
+                          }
+                        }, 1500);
+                      } else {
+                        window.open(activeBrowserAction.url, "_blank");
+                      }
+                      
+                      // Auto close overlay after action taken
+                      setTimeout(() => {
+                        setActiveBrowserAction(null);
+                      }, 1000);
                     } catch (e) {
                       console.error(e);
+                      window.open(activeBrowserAction.url, "_blank");
                     }
                   }}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all duration-300 shadow-md cursor-pointer hover:scale-105 select-none
@@ -1137,10 +1214,22 @@ export default function App() {
                       ? "bg-red-600 hover:bg-red-700 active:bg-red-800"
                       : activeBrowserAction.type === "spotify"
                         ? "bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700"
-                        : "bg-violet-600 hover:bg-violet-700 active:bg-violet-800"
+                        : activeBrowserAction.type === "maps"
+                          ? "bg-sky-500 hover:bg-sky-600 active:bg-sky-700"
+                          : activeBrowserAction.type === "whatsapp"
+                            ? "bg-teal-500 hover:bg-teal-600 active:bg-teal-700"
+                            : "bg-violet-600 hover:bg-violet-700 active:bg-violet-800"
                     }`}
                 >
-                  <span>Play</span>
+                  <span>
+                    {activeBrowserAction.type === "youtube" || activeBrowserAction.type === "spotify"
+                      ? "Play"
+                      : activeBrowserAction.type === "maps"
+                        ? "Open Map"
+                        : activeBrowserAction.type === "whatsapp"
+                          ? "Send"
+                          : "Open"}
+                  </span>
                   <ExternalLink size={12} />
                 </button>
 

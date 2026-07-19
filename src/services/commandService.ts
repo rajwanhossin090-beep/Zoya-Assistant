@@ -55,12 +55,39 @@ export function processCommand(command: string): {
     }
   }
 
+  // Google Maps Commands
+  if (
+    lowerCmd === "open map" || 
+    lowerCmd === "open maps" || 
+    lowerCmd === "open google maps" || 
+    lowerCmd === "google maps" || 
+    lowerCmd === "maps" || 
+    lowerCmd === "map"
+  ) {
+    return {
+      action: "Opening Google Maps for you, Boss!",
+      url: "https://www.google.com/maps",
+      isBrowserAction: true,
+    };
+  }
+
+  const mapsSearchMatch = lowerCmd.match(/^(?:search|show|find)\s+(.+?)\s+on\s+(?:google\s+)?maps?$/);
+  if (mapsSearchMatch) {
+    const query = encodeURIComponent(mapsSearchMatch[1].trim());
+    return {
+      action: `Finding ${mapsSearchMatch[1]} on Google Maps...`,
+      url: `https://www.google.com/maps/search/?api=1&query=${query}`,
+      isBrowserAction: true,
+    };
+  }
+
   // General Browsing: "Open [website name]"
   const openMatch = lowerCmd.match(/^open\s+(.+)$/);
   if (
     openMatch &&
     !lowerCmd.includes("youtube") &&
-    !lowerCmd.includes("spotify")
+    !lowerCmd.includes("spotify") &&
+    !lowerCmd.includes("map")
   ) {
     const rawTarget = openMatch[1].trim();
     let url = "";
