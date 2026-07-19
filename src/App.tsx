@@ -29,6 +29,13 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>("idle");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(false);
+  const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
+  const [installTab, setInstallTab] = useState<"ios" | "android">(() => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    return isIOS ? "ios" : "android";
+  });
 
   const [useMobileFrame, setUseMobileFrame] = useState<boolean>(() => {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -61,12 +68,13 @@ export default function App() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     // Detect if already installed/standalone mode
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
+    const checkStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
+    setIsStandalone(!!checkStandalone);
     
     // Check if iOS
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 
-    if (isStandalone) {
+    if (checkStandalone) {
       setShowInstallBtn(false);
     } else if (isIOS) {
       // iOS doesn't support beforeinstallprompt, but we want to show install instructions
@@ -89,8 +97,8 @@ export default function App() {
       setDeferredPrompt(null);
       setShowInstallBtn(false);
     } else {
-      // iOS Safari manual instructions
-      alert("To install Zoya on your iPhone/iPad:\n\n1. Tap the 'Share' button in Safari (the box with an up arrow at the bottom/top of the screen).\n2. Scroll down and select 'Add to Home Screen'.\n3. Tap 'Add' in the top right to install.");
+      // iOS Safari manual instructions modal
+      setShowInstallGuide(true);
     }
   };
 
@@ -589,6 +597,214 @@ export default function App() {
     </AnimatePresence>
   );
 
+  const renderInstallGuideModal = () => {
+    const isIframe = window.self !== window.top;
+    
+    const copyToClipboard = () => {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    };
+
+    return (
+      <AnimatePresence key="install-guide-modal">
+        {showInstallGuide && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 pointer-events-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className={`w-full max-w-md rounded-3xl p-6 shadow-2xl flex flex-col relative overflow-hidden border transition-colors duration-500
+                ${isLightTheme 
+                  ? "bg-white border-slate-200 text-slate-900" 
+                  : "bg-[#0b0c10]/95 border-white/10 text-white"
+                }`}
+            >
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-violet-500 via-pink-500 to-red-500" />
+              
+              <button
+                onClick={() => setShowInstallGuide(false)}
+                className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors cursor-pointer
+                  ${isLightTheme ? "hover:bg-slate-100 text-slate-400 hover:text-slate-600" : "hover:bg-white/10 text-white/40 hover:text-white"}`}
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
+                  ${isLightTheme ? "bg-violet-50" : "bg-violet-500/10"}`}>
+                  <Smartphone size={20} className="text-violet-500" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-base font-serif font-semibold">Run on Home Screen</h3>
+                  <p className={`text-[11px] ${isLightTheme ? "text-slate-500" : "text-white/40"}`}>
+                    Install Zoya as a web app on your phone
+                  </p>
+                </div>
+              </div>
+
+              {isIframe && (
+                <div className={`p-3 rounded-2xl text-[11px] mb-4 border leading-relaxed flex flex-col gap-2 text-left
+                  ${isLightTheme 
+                    ? "bg-amber-50/50 border-amber-200/50 text-amber-800" 
+                    : "bg-amber-500/5 border-amber-500/20 text-amber-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <span>⚠️</span>
+                    <span>Running inside a browser frame</span>
+                  </div>
+                  <p>
+                    You are currently previewing Zoya in AI Studio. To run Zoya natively on your home screen, you must first open it directly in your mobile browser.
+                  </p>
+                  <button
+                    onClick={copyToClipboard}
+                    className={`mt-1 py-1.5 px-3 rounded-xl font-bold text-[10px] self-start transition-all cursor-pointer flex items-center gap-1
+                      ${isLightTheme 
+                        ? "bg-amber-600/10 hover:bg-amber-600/20 text-amber-700 border border-amber-600/10" 
+                        : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20"
+                      }`}
+                  >
+                    <span>{copiedUrl ? "✓ Copied!" : "📋 Copy App URL"}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Benefits Banner */}
+              <div className={`p-3 rounded-2xl text-[11px] mb-4 flex flex-col gap-1.5 text-left
+                ${isLightTheme ? "bg-slate-50" : "bg-white/5"}`}
+              >
+                <span className="font-bold opacity-80">💡 Home Screen App Benefits:</span>
+                <ul className="list-disc list-inside space-y-1 opacity-70 px-0.5">
+                  <li>Launches directly, not through the Chrome/Safari browser bar</li>
+                  <li>Immersive fullscreen layout without standard URL addresses</li>
+                  <li>Keeps background voice wake word alive perfectly</li>
+                </ul>
+              </div>
+
+              {/* Tab Selector */}
+              <div className={`flex p-1 rounded-xl mb-4 text-xs font-semibold
+                ${isLightTheme ? "bg-slate-100" : "bg-white/5"}`}
+              >
+                <button
+                  onClick={() => setInstallTab("ios")}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer
+                    ${installTab === "ios" 
+                      ? isLightTheme ? "bg-white shadow-sm text-slate-900" : "bg-white/10 text-white" 
+                      : "opacity-60 hover:opacity-90"}`}
+                >
+                  iPhone & iPad (iOS)
+                </button>
+                <button
+                  onClick={() => setInstallTab("android")}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer
+                    ${installTab === "android" 
+                      ? isLightTheme ? "bg-white shadow-sm text-slate-900" : "bg-white/10 text-white" 
+                      : "opacity-60 hover:opacity-90"}`}
+                >
+                  Android (Chrome)
+                </button>
+              </div>
+
+              {/* Instructions list */}
+              <div className="flex-1 min-h-[140px] flex flex-col justify-center text-left">
+                {installTab === "ios" ? (
+                  <div className="space-y-3.5 text-xs">
+                    <div className="flex gap-2.5 items-start">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]
+                        ${isLightTheme ? "bg-violet-100 text-violet-700" : "bg-violet-500/20 text-violet-400"}`}>
+                        1
+                      </div>
+                      <div className="leading-relaxed">
+                        Open the app in <span className="font-semibold">Safari</span> and tap the <span className="font-semibold">Share</span> button 📤 at the bottom of the screen.
+                      </div>
+                    </div>
+                    <div className="flex gap-2.5 items-start">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]
+                        ${isLightTheme ? "bg-violet-100 text-violet-700" : "bg-violet-500/20 text-violet-400"}`}>
+                        2
+                      </div>
+                      <div className="leading-relaxed">
+                        Scroll down and select <span className="font-semibold">"Add to Home Screen"</span> ➕ from the options list.
+                      </div>
+                    </div>
+                    <div className="flex gap-2.5 items-start">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]
+                        ${isLightTheme ? "bg-violet-100 text-violet-700" : "bg-violet-500/20 text-violet-400"}`}>
+                        3
+                      </div>
+                      <div className="leading-relaxed">
+                        Choose a name (e.g. "Zoya") and tap <span className="font-semibold text-violet-500">"Add"</span> in the top-right corner to install!
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5 text-xs">
+                    {deferredPrompt ? (
+                      <div className="flex flex-col items-center justify-center py-2 text-center gap-3">
+                        <p className="opacity-70 text-[11px] px-3">
+                          Your Android browser fully supports automatic home screen installation! Click the button below to add Zoya instantly:
+                        </p>
+                        <button
+                          onClick={() => {
+                            setShowInstallGuide(false);
+                            handleInstallClick();
+                          }}
+                          className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl text-xs transition-colors shadow-md flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download size={14} />
+                          <span>Install Instantly Now</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-2.5 items-start">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]
+                            ${isLightTheme ? "bg-violet-100 text-violet-700" : "bg-violet-500/20 text-violet-400"}`}>
+                            1
+                          </div>
+                          <div className="leading-relaxed">
+                            Open this app in <span className="font-semibold">Chrome</span> and tap the <span className="font-semibold">Menu</span> button ⋮ in the top right.
+                          </div>
+                        </div>
+                        <div className="flex gap-2.5 items-start">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]
+                            ${isLightTheme ? "bg-violet-100 text-violet-700" : "bg-violet-500/20 text-violet-400"}`}>
+                            2
+                          </div>
+                          <div className="leading-relaxed">
+                            Tap <span className="font-semibold">"Install App"</span> or <span className="font-semibold">"Add to Home screen"</span> ➕.
+                          </div>
+                        </div>
+                        <div className="flex gap-2.5 items-start">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]
+                            ${isLightTheme ? "bg-violet-100 text-violet-700" : "bg-violet-500/20 text-violet-400"}`}>
+                            3
+                          </div>
+                          <div className="leading-relaxed">
+                            Confirm the installation prompt to complete placing Zoya directly on your phone's screen.
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowInstallGuide(false)}
+                className={`w-full mt-6 py-2.5 rounded-xl font-bold text-xs transition-colors shadow-md cursor-pointer
+                  ${isLightTheme ? "bg-slate-100 hover:bg-slate-200 text-slate-800" : "bg-white/5 hover:bg-white/10 text-white"}`}
+              >
+                Close Guide
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    );
+  };
+
   const renderSettingsModal = () => (
     <AnimatePresence key="settings-modal">
       {showSettingsModal && (
@@ -811,6 +1027,25 @@ export default function App() {
                   <Smartphone size={14} />
                   <span>Run Natively on Physical Mobile Phone</span>
                 </button>
+              )}
+              {isMobileDevice && (
+                isStandalone ? (
+                  <div className={`w-full py-2.5 ${isLightTheme ? "bg-slate-100 text-emerald-600" : "bg-white/5 text-emerald-400"} font-semibold rounded-xl text-xs transition-all text-center flex items-center justify-center gap-1.5 border ${isLightTheme ? "border-emerald-200" : "border-emerald-500/20"}`}>
+                    <span className="text-sm">✨</span>
+                    <span>Running Natively on Home Screen</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setShowSettingsModal(false);
+                      setShowInstallGuide(true);
+                    }}
+                    className="w-full py-2.5 bg-gradient-to-r from-violet-600 to-pink-600 text-white font-semibold rounded-xl text-xs hover:opacity-95 transition-all text-center flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Download size={14} />
+                    <span>Add to Phone's Home Screen</span>
+                  </button>
+                )
               )}
               <button
                 onClick={() => setShowSettingsModal(false)}
@@ -1376,6 +1611,7 @@ export default function App() {
         {/* Modal Modifiers Render */}
         {renderQrModal()}
         {renderSettingsModal()}
+        {renderInstallGuideModal()}
       </div>
     );
   }
@@ -1386,6 +1622,7 @@ export default function App() {
       {renderMainApp()}
       {renderQrModal()}
       {renderSettingsModal()}
+      {renderInstallGuideModal()}
     </>
   );
 }
