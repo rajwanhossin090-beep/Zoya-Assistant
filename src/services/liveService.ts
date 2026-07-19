@@ -19,6 +19,11 @@ export class LiveSessionManager {
   private isPlaying: boolean = false;
   public isMuted: boolean = false;
   private isStopped: boolean = false;
+
+  // Screen sharing state
+  private screenStream: MediaStream | null = null;
+  private screenInterval: number | null = null;
+  public onScreenShareActive: (active: boolean) => void = () => {};
   
   public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
@@ -279,6 +284,9 @@ export class LiveSessionManager {
     if (this.isStopped) return;
     this.isStopped = true;
 
+    // Clean up screen sharing
+    this.stopScreenShare();
+
     if (this.processor) {
       try { this.processor.disconnect(); } catch (e) {}
       this.processor = null;
@@ -308,6 +316,79 @@ export class LiveSessionManager {
     }
     
     this.onStateChange("idle");
+  }
+
+  public isScreenSharing(): boolean {
+    return !!this.screenStream;
+  }
+
+  async startScreenShare() {
+    if (this.screenStream) return;
+    try {
+      this.screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { max: 640 },
+          height: { max: 480 },
+          frameRate: { max: 5 }
+        },
+        audio: false
+      });
+
+      const videoTrack = this.screenStream.getVideoTracks()[0];
+      
+      const video = document.createElement("video");
+      video.srcObject = this.screenStream;
+      video.muted = true;
+      video.playsInline = true;
+      video.play().catch(err => console.error("Error playing capture video:", err));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 240;
+      const ctx = canvas.getContext("2d");
+
+      this.screenInterval = window.setInterval(() => {
+        if (!this.sessionPromise || !ctx || video.paused || video.ended) return;
+        
+        try {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+          const base64Data = dataUrl.split(",")[1];
+          
+          this.sessionPromise.then(session => {
+            session.sendRealtimeInput({
+              video: { data: base64Data, mimeType: "image/jpeg" }
+            });
+          }).catch(err => console.error("Error sending screen frame:", err));
+        } catch (err) {
+          console.error("Error capturing screen frame:", err);
+        }
+      }, 1500); // 1.5 seconds interval (~0.66 FPS)
+
+      videoTrack.onended = () => {
+        this.stopScreenShare();
+      };
+
+      this.onScreenShareActive(true);
+    } catch (err) {
+      console.error("Failed to start screen share:", err);
+      this.stopScreenShare();
+      throw err;
+    }
+  }
+
+  stopScreenShare() {
+    if (this.screenInterval) {
+      clearInterval(this.screenInterval);
+      this.screenInterval = null;
+    }
+    if (this.screenStream) {
+      try {
+        this.screenStream.getTracks().forEach(t => t.stop());
+      } catch (e) {}
+      this.screenStream = null;
+    }
+    this.onScreenShareActive(false);
   }
 
   sendText(text: string) {

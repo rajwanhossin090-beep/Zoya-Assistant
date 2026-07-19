@@ -7,6 +7,7 @@ import Visualizer from "./components/Visualizer";
 import LiveWallpaper from "./components/LiveWallpaper";
 import PermissionModal from "./components/PermissionModal";
 import GoogleDialerPermissionModal from "./components/GoogleDialerPermissionModal";
+import GeminiLiveScreen from "./components/GeminiLiveScreen";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -132,6 +133,7 @@ export default function App() {
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   const [zoyaMood, setZoyaMood] = useState<ZoyaMood>(() => {
     const saved = localStorage.getItem("zoya_mood");
@@ -219,6 +221,28 @@ export default function App() {
       songName: songName || undefined,
       type
     });
+
+    try {
+      if (url.startsWith("tel:")) {
+        window.location.href = targetUrl;
+        setTimeout(() => {
+          setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
+        }, 10000);
+      } else {
+        const newWin = window.open(url, "_blank");
+        if (newWin) {
+          // Auto close overlay since Chrome opened it successfully in a new tab
+          setTimeout(() => {
+            setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
+          }, 8000);
+        }
+      }
+    } catch (err) {
+      console.error("Chrome auto-open tab failed:", err);
+      if (!url.startsWith("tel:")) {
+        window.open(url, "_blank");
+      }
+    }
   }, [hasDialerPermission]);
 
   useEffect(() => {
@@ -336,6 +360,7 @@ export default function App() {
   const toggleListening = useCallback(async () => {
     if (isSessionActive) {
       setIsSessionActive(false);
+      setIsScreenSharing(false);
       if (liveSessionRef.current) {
         liveSessionRef.current.stop();
         liveSessionRef.current = null;
@@ -361,6 +386,7 @@ export default function App() {
         
         session.onClose = () => {
           setIsSessionActive(false);
+          setIsScreenSharing(false);
           setAppState("idle");
           liveSessionRef.current = null;
         };
@@ -369,15 +395,33 @@ export default function App() {
           triggerBrowserAction(url, "Command triggered from voice session");
         };
 
+        session.onScreenShareActive = (active) => {
+          setIsScreenSharing(active);
+        };
+ 
         await session.start();
       } catch (e) {
         console.error("Failed to start session", e);
         setShowPermissionModal(true);
         setIsSessionActive(false);
+        setIsScreenSharing(false);
         setAppState("idle");
       }
     }
   }, [isSessionActive, isMuted, zoyaMood, sassLevel, zoyaTheme, hasDialerPermission, triggerBrowserAction]);
+
+  const toggleScreenShare = useCallback(async () => {
+    if (!liveSessionRef.current) return;
+    try {
+      if (isScreenSharing) {
+        liveSessionRef.current.stopScreenShare();
+      } else {
+        await liveSessionRef.current.startScreenShare();
+      }
+    } catch (err) {
+      console.error("Screen sharing toggle error:", err);
+    }
+  }, [isScreenSharing]);
 
   const toggleListeningRef = useRef(toggleListening);
   useEffect(() => {
@@ -1001,9 +1045,30 @@ export default function App() {
     </AnimatePresence>
   );
 
-  const renderMainApp = () => (
-    <div className={`h-full w-full flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0 transition-colors duration-500
-      ${isLightTheme ? "bg-[#f8fafc] text-slate-900" : "bg-[#050505] text-white"}`}>
+  const renderMainApp = () => {
+    if (isSessionActive) {
+      return (
+        <GeminiLiveScreen
+          state={appState}
+          isMuted={isMuted}
+          onToggleMute={() => setIsMuted(!isMuted)}
+          onEndSession={toggleListening}
+          messages={messages}
+          theme={zoyaTheme}
+          onThemeChange={setZoyaTheme}
+          mood={zoyaMood}
+          onMoodChange={setZoyaMood}
+          sassLevel={sassLevel}
+          onSassLevelChange={setSassLevel}
+          isScreenSharing={isScreenSharing}
+          onToggleScreenShare={toggleScreenShare}
+        />
+      );
+    }
+
+    return (
+      <div className={`h-full w-full flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0 transition-colors duration-500
+        ${isLightTheme ? "bg-[#f8fafc] text-slate-900" : "bg-[#050505] text-white"}`}>
       
       {/* Floating Action Trigger Fallback Card */}
       <AnimatePresence>
@@ -1092,10 +1157,12 @@ export default function App() {
                   </h4>
                   <p className="text-[11px] opacity-60 leading-normal mt-0.5">
                     {activeBrowserAction.type === "maps" 
-                      ? "Tap Open Map to view direction/location natively" 
+                      ? "Opening Google Maps in Chrome. Tap Open Map if blocked!" 
                       : activeBrowserAction.type === "youtube" || activeBrowserAction.type === "spotify"
-                        ? "Tap Play to listen now! (Bypasses popup blocker)"
-                        : "Tap Open to launch the connection"}
+                        ? "Opening in Chrome tab. Tap Play if blocked!"
+                        : activeBrowserAction.type === "whatsapp"
+                          ? "Opening WhatsApp Web. Tap Send if blocked!"
+                          : "Opening in Chrome. Tap Open if blocked by browser!"}
                   </p>
                 </div>
 
@@ -1515,6 +1582,7 @@ export default function App() {
       </footer>
     </div>
   );
+  };
 
   // Main Return Statement: Determines Fullscreen vs Mobile Device Simulation
   if (useMobileFrame && !isMobileDevice) {
