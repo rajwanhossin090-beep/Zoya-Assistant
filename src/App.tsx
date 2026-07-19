@@ -169,9 +169,7 @@ export default function App() {
   const [hasBackgroundPermission, setHasBackgroundPermission] = useState<boolean>(() => {
     return localStorage.getItem("google_background_permission") === "true";
   });
-  const [launchAppsDirectly, setLaunchAppsDirectly] = useState<boolean>(() => {
-    return localStorage.getItem("zoya_launch_apps_directly") !== "false";
-  });
+
   const [showDialerPermissionModal, setShowDialerPermissionModal] = useState(false);
 
   const [activeBrowserAction, setActiveBrowserAction] = useState<{
@@ -210,43 +208,8 @@ export default function App() {
     let targetUrl = url;
     let isNativeScheme = false;
 
-    if (launchAppsDirectly) {
-      if (url.includes("spotify.com")) {
-        const match = url.match(/search\/([^&?]+)/);
-        if (match) {
-          targetUrl = `spotify:search:${match[1]}`;
-          isNativeScheme = true;
-        } else {
-          targetUrl = url.replace("https://open.spotify.com/", "spotify://");
-          isNativeScheme = true;
-        }
-      } else if (url.includes("youtube.com")) {
-        const match = url.match(/search_query=([^&]+)/);
-        if (match) {
-          targetUrl = `youtube://www.youtube.com/results?search_query=${match[1]}`;
-        } else {
-          targetUrl = url.replace("https://www.youtube.com", "youtube://www.youtube.com").replace("https://youtube.com", "youtube://youtube.com");
-        }
-        isNativeScheme = true;
-      } else if (url.includes("whatsapp.com")) {
-        targetUrl = url.replace("https://web.whatsapp.com/", "whatsapp://").replace("https://api.whatsapp.com/", "whatsapp://");
-        isNativeScheme = true;
-      } else if (url.startsWith("tel:")) {
-        isNativeScheme = true;
-      } else if (type === "maps") {
-        const queryMatch = url.match(/[?&](query|q)=([^&]+)/);
-        const query = queryMatch ? queryMatch[2] : "";
-        if (query) {
-          targetUrl = /iPad|iPhone|iPod/.test(navigator.userAgent)
-            ? `maps://?q=${query}`
-            : `geo:0,0?q=${query}`;
-        } else {
-          targetUrl = /iPad|iPhone|iPod/.test(navigator.userAgent)
-            ? `maps://`
-            : `geo:0,0`;
-        }
-        isNativeScheme = true;
-      }
+    if (url.startsWith("tel:")) {
+      isNativeScheme = true;
     }
 
     setActiveBrowserAction({
@@ -258,26 +221,17 @@ export default function App() {
     });
 
     try {
-      if (launchAppsDirectly && isNativeScheme) {
-        // Direct launch for custom app protocols
+      if (isNativeScheme) {
         window.location.href = targetUrl;
-        // Keep active browser action overlay visible for a bit longer so user can manually tap if blocked/failed
         setTimeout(() => {
           setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
         }, 12000);
       } else {
-        if (targetUrl.startsWith("tel:")) {
-          window.location.href = targetUrl;
+        const newWin = window.open(targetUrl, "_blank");
+        if (newWin) {
           setTimeout(() => {
             setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
           }, 12000);
-        } else {
-          const newWin = window.open(targetUrl, "_blank");
-          if (newWin) {
-            setTimeout(() => {
-              setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
-            }, 12000);
-          }
         }
       }
     } catch (err) {
@@ -288,7 +242,7 @@ export default function App() {
         window.open(targetUrl, "_blank");
       }
     }
-  }, [hasDialerPermission, launchAppsDirectly]);
+  }, [hasDialerPermission]);
 
   useEffect(() => {
     localStorage.setItem("google_dialer_permission", String(hasDialerPermission));
@@ -310,9 +264,7 @@ export default function App() {
     localStorage.setItem("zoya_wake_word_enabled", String(isWakeWordEnabled));
   }, [isWakeWordEnabled]);
 
-  useEffect(() => {
-    localStorage.setItem("zoya_launch_apps_directly", String(launchAppsDirectly));
-  }, [launchAppsDirectly]);
+
 
 
 
@@ -967,25 +919,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
-                ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5">
-                    <Zap size={12} className="text-amber-500" />
-                    <span className="text-xs font-semibold">Direct App Launch</span>
-                  </div>
-                  <span className="text-[10px] opacity-60">Launch native apps (Spotify, YouTube, WhatsApp) directly, bypassing Chrome tabs</span>
-                </div>
-                <button
-                  onClick={() => setLaunchAppsDirectly(!launchAppsDirectly)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 cursor-pointer
-                    ${launchAppsDirectly ? "bg-amber-500" : isLightTheme ? "bg-slate-200" : "bg-white/10"}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
-                    ${launchAppsDirectly ? "translate-x-6" : "translate-x-1"}`} 
-                  />
-                </button>
-              </div>
+
 
               <div className={`flex items-center justify-between p-3 rounded-2xl border transition-all
                 ${isLightTheme ? "bg-slate-50/50 border-slate-100" : "bg-white/5 border-white/5"}`}>
@@ -1192,22 +1126,8 @@ export default function App() {
                 <button
                   onClick={() => {
                     try {
-                      if (activeBrowserAction.nativeUrl && launchAppsDirectly) {
-                        // Smart native deep link redirect on mobile browsers
-                        const start = Date.now();
-                        let opened = false;
-                        const onBlur = () => { opened = true; };
-                        window.addEventListener("blur", onBlur);
-                        
+                      if (activeBrowserAction.nativeUrl) {
                         window.location.href = activeBrowserAction.nativeUrl;
-                        
-                        setTimeout(() => {
-                          window.removeEventListener("blur", onBlur);
-                          if (!opened && (Date.now() - start < 2000)) {
-                            // Deep link failed, fallback to standard web link
-                            window.open(activeBrowserAction.url, "_blank");
-                          }
-                        }, 1500);
                       } else {
                         window.open(activeBrowserAction.url, "_blank");
                       }
