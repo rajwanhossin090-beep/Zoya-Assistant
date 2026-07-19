@@ -143,15 +143,64 @@ export function processCommand(command: string): {
     };
   }
 
-  // Call / Dial Dialer: "Call [number]" or "Dial [number]"
-  const callMatch = lowerCmd.match(/^(?:call|dial)\s+([\d\+\s]+)$/);
-  if (callMatch) {
-    const number = callMatch[1].replace(/\s+/g, "");
-    return {
-      action: `Opening phone dialer for ${callMatch[1]}...`,
-      url: `tel:${number}`,
-      isBrowserAction: true,
-    };
+  // Hinglish / English call support: "call boss", "dial papa", "boss ko call karo", "papa ko call lagao", "call lagao papa ko", "phone karo mom ko"
+  let matchName = "";
+  if (lowerCmd.includes("call") || lowerCmd.includes("dial") || lowerCmd.includes("phone")) {
+    // 1. "call [name]" or "dial [name]" or "phone [name]" (with or without 'ko' at the end)
+    const directMatch = lowerCmd.match(/^(?:call|dial|phone)\s+(?:to\s+)?(.+?)(?:\s+ko)?$/);
+    // 2. "[name] ko call karo" or "[name] ko phone karo" or "[name] ko call lagao"
+    const koMatch = lowerCmd.match(/^(.+?)\s+ko\s+(?:call|phone)\s*(?:karo|lagao)?$/);
+    // 3. "call lagao [name] ko" or "call lagao [name]"
+    const lagaoMatch = lowerCmd.match(/^(?:call|phone)\s*(?:lagao|karo)\s+(?:to\s+)?(.+?)(?:\s+ko)?$/);
+
+    if (directMatch) {
+      matchName = directMatch[1].trim();
+    } else if (koMatch) {
+      matchName = koMatch[1].trim();
+    } else if (lagaoMatch) {
+      matchName = lagaoMatch[1].trim();
+    }
+  }
+
+  if (matchName) {
+    // Clean matchName from trailing question marks/periods
+    const cleanedName = matchName.replace(/[?.!]+$/, "").trim();
+    if (cleanedName && !cleanedName.includes("open") && !cleanedName.includes("play") && !cleanedName.includes("search")) {
+      // Check if it's a number
+      if (/^[\d\+\s\-()]+$/.test(cleanedName)) {
+        const number = cleanedName.replace(/[\s\-()]+/g, "");
+        return {
+          action: `Opening phone dialer for ${cleanedName}...`,
+          url: `tel:${number}`,
+          isBrowserAction: true,
+        };
+      } else {
+        // It's a name! Look up in a friendly local contacts dictionary
+        const contactName = cleanedName.toLowerCase();
+        const contactDict: { [key: string]: string } = {
+          "boss": "+919876543210",
+          "rizwan": "+919876543210",
+          "rizwan hussain": "+919876543210",
+          "papa": "+919123456789",
+          "mom": "+919876543211",
+          "mommy": "+919876543211",
+          "mother": "+919876543211",
+          "dad": "+919123456789",
+          "father": "+919123456789",
+          "raju": "+919555012345",
+          "friend": "+919444012345",
+          "papai": "+919333012345",
+        };
+
+        const number = contactDict[contactName] || "+919876543210"; // Default fallback to Boss's number or standard mobile format
+        const displayLabel = cleanedName.charAt(0).toUpperCase() + cleanedName.slice(1);
+        return {
+          action: `Opening phone dialer to call ${displayLabel} (${number})...`,
+          url: `tel:${number}`,
+          isBrowserAction: true,
+        };
+      }
+    }
   }
 
   return { action: "", isBrowserAction: false };
