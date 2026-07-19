@@ -8,6 +8,7 @@ import LiveWallpaper from "./components/LiveWallpaper";
 import PermissionModal from "./components/PermissionModal";
 import GoogleDialerPermissionModal from "./components/GoogleDialerPermissionModal";
 import GeminiLiveScreen from "./components/GeminiLiveScreen";
+import BatteryIndicator from "./components/BatteryIndicator";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -133,9 +134,6 @@ export default function App() {
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [shareMode, setShareMode] = useState<"screen" | "camera" | "none">("none");
-  const [screenShareError, setScreenShareError] = useState<string | null>(null);
 
   const [zoyaMood, setZoyaMood] = useState<ZoyaMood>(() => {
     const saved = localStorage.getItem("zoya_mood");
@@ -362,9 +360,6 @@ export default function App() {
   const toggleListening = useCallback(async () => {
     if (isSessionActive) {
       setIsSessionActive(false);
-      setIsScreenSharing(false);
-      setShareMode("none");
-      setScreenShareError(null);
       if (liveSessionRef.current) {
         liveSessionRef.current.stop();
         liveSessionRef.current = null;
@@ -375,7 +370,6 @@ export default function App() {
       try {
         setIsSessionActive(true);
         resetZoyaSession();
-        setScreenShareError(null);
         
         const session = new LiveSessionManager(zoyaMood, sassLevel, zoyaTheme);
         session.isMuted = isMuted;
@@ -391,9 +385,6 @@ export default function App() {
         
         session.onClose = () => {
           setIsSessionActive(false);
-          setIsScreenSharing(false);
-          setShareMode("none");
-          setScreenShareError(null);
           setAppState("idle");
           liveSessionRef.current = null;
         };
@@ -401,55 +392,16 @@ export default function App() {
         session.onCommand = (url) => {
           triggerBrowserAction(url, "Command triggered from voice session");
         };
-
-        session.onScreenShareActive = (active, mode) => {
-          setIsScreenSharing(active);
-          setShareMode(mode);
-          if (active) {
-            setScreenShareError(null);
-          }
-        };
  
         await session.start();
       } catch (e) {
         console.error("Failed to start session", e);
         setShowPermissionModal(true);
         setIsSessionActive(false);
-        setIsScreenSharing(false);
-        setShareMode("none");
-        setScreenShareError(null);
         setAppState("idle");
       }
     }
   }, [isSessionActive, isMuted, zoyaMood, sassLevel, zoyaTheme, hasDialerPermission, triggerBrowserAction]);
-
-  const toggleScreenShare = useCallback(async () => {
-    if (!liveSessionRef.current) return;
-    setScreenShareError(null);
-    try {
-      if (isScreenSharing) {
-        liveSessionRef.current.stopScreenShare();
-      } else {
-        await liveSessionRef.current.startScreenShare();
-      }
-    } catch (err: any) {
-      console.error("Screen sharing toggle error:", err);
-      const errMsg = err?.message || String(err);
-      
-      if (errMsg.includes("NotAllowedError") || errMsg.includes("PermissionDeniedError") || errMsg.includes("denied") || errMsg.includes("dismissed") || errMsg.includes("dismissal")) {
-        setScreenShareError("Permission dismissed or denied. Please grant screen/camera permissions to share your screen.");
-      } else if (errMsg.includes("mediaDevices") || errMsg.includes("not a function")) {
-        setScreenShareError("Screen sharing is not supported on this browser or inside the preview iframe. Open in a new tab to grant permissions!");
-      } else {
-        setScreenShareError(errMsg);
-      }
-      
-      // Auto-dismiss the error message after 6 seconds
-      setTimeout(() => {
-        setScreenShareError((prev) => (prev === errMsg || prev?.includes("dismissed") || prev?.includes("iframe") ? null : prev));
-      }, 7000);
-    }
-  }, [isScreenSharing]);
 
   const toggleListeningRef = useRef(toggleListening);
   useEffect(() => {
@@ -1088,10 +1040,6 @@ export default function App() {
           onMoodChange={setZoyaMood}
           sassLevel={sassLevel}
           onSassLevelChange={setSassLevel}
-          isScreenSharing={isScreenSharing}
-          shareMode={shareMode}
-          screenShareError={screenShareError}
-          onToggleScreenShare={toggleScreenShare}
         />
       );
     }
@@ -1318,7 +1266,17 @@ export default function App() {
             {zoyaTheme === "anime" ? "Crimson Zoya" : zoyaTheme === "enemy" ? "Nemesis Zoya" : "Zoya Pro"}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Real Device Battery Status */}
+          <BatteryIndicator 
+            size="md" 
+            className={`px-3 py-1.5 rounded-full border text-xs font-semibold tracking-wider transition-all backdrop-blur-sm
+              ${isLightTheme 
+                ? "bg-slate-50 text-slate-700 border-slate-200" 
+                : "bg-white/5 text-white/90 border-white/10 hover:bg-white/10"
+              }`} 
+          />
+
           {window.self !== window.top && (
             <a
               href={window.location.href}
@@ -1683,9 +1641,7 @@ export default function App() {
               </div>
               <span className="font-bold tracking-wider">5G</span>
               {/* Battery Indicator */}
-              <div className="flex items-center border border-current rounded-sm px-[1.5px] py-[1px] w-5 h-3 opacity-80">
-                <div className="bg-current h-full w-[85%] rounded-2xs" />
-              </div>
+              <BatteryIndicator showText={false} size="sm" className="opacity-90" />
             </div>
           </div>
 

@@ -13,11 +13,10 @@ import {
   Zap,
   RotateCcw,
   MessageSquare,
-  ShieldAlert,
-  ScreenShare,
-  Tv
+  ShieldAlert
 } from "lucide-react";
 import { ZoyaMood, ZoyaTheme } from "../services/geminiService";
+import BatteryIndicator from "./BatteryIndicator";
 
 interface GeminiLiveScreenProps {
   state: "idle" | "listening" | "processing" | "speaking";
@@ -31,10 +30,6 @@ interface GeminiLiveScreenProps {
   onMoodChange: (mood: ZoyaMood) => void;
   sassLevel: number;
   onSassLevelChange: (level: number) => void;
-  isScreenSharing: boolean;
-  shareMode?: "screen" | "camera" | "none";
-  screenShareError?: string | null;
-  onToggleScreenShare: () => void;
 }
 
 export default function GeminiLiveScreen({
@@ -49,10 +44,6 @@ export default function GeminiLiveScreen({
   onMoodChange,
   sassLevel,
   onSassLevelChange,
-  isScreenSharing,
-  shareMode = "none",
-  screenShareError = null,
-  onToggleScreenShare,
 }: GeminiLiveScreenProps) {
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -75,7 +66,7 @@ export default function GeminiLiveScreen({
           accentColor: "text-pink-400",
           accentBg: "bg-pink-500",
           waveColors: ["bg-pink-400", "bg-rose-400", "bg-fuchsia-400", "bg-pink-300"],
-          title: "Crimson Zoya Live",
+          title: "Crimson Zoya",
           ringColor: "border-pink-500/30",
           orbShadow: "0 0 50px rgba(236, 72, 153, 0.6)"
         };
@@ -86,7 +77,7 @@ export default function GeminiLiveScreen({
           accentColor: "text-red-500",
           accentBg: "bg-red-600",
           waveColors: ["bg-red-500", "bg-rose-600", "bg-orange-500", "bg-red-400"],
-          title: "Nemesis Zoya Live",
+          title: "Nemesis Zoya",
           ringColor: "border-red-500/30",
           orbShadow: "0 0 50px rgba(220, 38, 38, 0.6)"
         };
@@ -97,7 +88,7 @@ export default function GeminiLiveScreen({
           accentColor: "text-cyan-400",
           accentBg: "bg-cyan-500",
           waveColors: ["bg-cyan-400", "bg-violet-500", "bg-sky-400", "bg-teal-400"],
-          title: "Zoya Pro Live",
+          title: "Zoya Pro",
           ringColor: "border-cyan-500/30",
           orbShadow: "0 0 50px rgba(6, 182, 212, 0.6)"
         };
@@ -166,7 +157,13 @@ export default function GeminiLiveScreen({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Real Device Battery Status */}
+          <BatteryIndicator 
+            size="md" 
+            className="px-3.5 py-1.5 rounded-full border border-white/10 bg-white/5 text-white/95 text-xs font-semibold tracking-wider transition-all hover:bg-white/10 backdrop-blur-sm" 
+          />
+
           {/* Quick Settings Drawer Toggle */}
           <button
             onClick={() => setShowQuickSettings(!showQuickSettings)}
@@ -174,7 +171,7 @@ export default function GeminiLiveScreen({
               ${showQuickSettings 
                 ? "bg-white text-slate-900 border-white" 
                 : "bg-white/5 border-white/10 text-white hover:bg-white/15"}`}
-            title="Configure Assistant Live"
+            title="Configure Assistant"
           >
             <SlidersHorizontal size={16} />
           </button>
@@ -296,39 +293,6 @@ export default function GeminiLiveScreen({
           </div>
         </div>
 
-        {/* Screen sharing active status banner */}
-        {isScreenSharing && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] text-cyan-300 flex items-center gap-1.5 font-semibold tracking-wider uppercase animate-pulse shadow-md"
-          >
-            {shareMode === "camera" ? (
-              <>
-                <Tv size={12} className="text-cyan-400" />
-                Live Camera Feed Active
-              </>
-            ) : (
-              <>
-                <ScreenShare size={12} className="text-cyan-400" />
-                Live Screen Share Active
-              </>
-            )}
-          </motion.div>
-        )}
-
-        {/* Screen sharing error banner */}
-        {screenShareError && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-2 mx-6 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2 max-w-md text-center shadow-md font-medium"
-          >
-            <ShieldAlert size={14} className="text-rose-400 shrink-0" />
-            <span>{screenShareError}</span>
-          </motion.div>
-        )}
-
         {/* Ambient indicator of full-duplex functionality */}
         <p className="text-[10px] opacity-40 mt-3 flex items-center gap-1">
           <Zap size={10} className="text-amber-400" />
@@ -388,22 +352,6 @@ export default function GeminiLiveScreen({
           {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
         </button>
 
-        {/* Button: Screen Share */}
-        <button
-          onClick={onToggleScreenShare}
-          className={`p-4 rounded-full border transition-all cursor-pointer shadow-lg hover:scale-105 active:scale-95 flex items-center justify-center
-            ${isScreenSharing 
-              ? "bg-cyan-500/25 border-cyan-500/40 text-cyan-400 animate-pulse" 
-              : "bg-white/5 border-white/10 text-white hover:bg-white/10"}`}
-          title={
-            isScreenSharing 
-              ? (shareMode === "camera" ? "Stop Camera Feed" : "Stop Screen Share") 
-              : "Share Screen / Camera"
-          }
-        >
-          {shareMode === "camera" ? <Tv size={20} /> : <ScreenShare size={20} />}
-        </button>
-
         {/* Button B: Core End Session Action (Glowing Crimson Red Circle) */}
         <button
           onClick={onEndSession}
@@ -411,7 +359,7 @@ export default function GeminiLiveScreen({
           style={{
             boxShadow: "0 10px 30px rgba(239, 68, 68, 0.4)"
           }}
-          title="End Live Voice Chat"
+          title="End Voice Chat"
         >
           <PhoneOff size={22} className="group-hover:rotate-12 transition-transform" />
           <span className="absolute -inset-1 rounded-full bg-red-500/20 animate-pulse pointer-events-none" />
@@ -444,7 +392,7 @@ export default function GeminiLiveScreen({
             <div className="flex justify-between items-center pb-2 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal size={16} className="text-cyan-400" />
-                <h3 className="font-bold text-sm tracking-wide">Zoya Live Configuration</h3>
+                <h3 className="font-bold text-sm tracking-wide">Zoya Configuration</h3>
               </div>
               <button
                 onClick={() => setShowQuickSettings(false)}

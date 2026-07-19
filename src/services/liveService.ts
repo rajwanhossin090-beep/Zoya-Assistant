@@ -20,12 +20,6 @@ export class LiveSessionManager {
   public isMuted: boolean = false;
   private isStopped: boolean = false;
 
-  // Screen sharing state
-  private screenStream: MediaStream | null = null;
-  private screenInterval: number | null = null;
-  private activeShareMode: "screen" | "camera" | "none" = "none";
-  public onScreenShareActive: (active: boolean, mode: "screen" | "camera" | "none") => void = () => {};
-  
   public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
@@ -285,9 +279,6 @@ export class LiveSessionManager {
     if (this.isStopped) return;
     this.isStopped = true;
 
-    // Clean up screen sharing
-    this.stopScreenShare();
-
     if (this.processor) {
       try { this.processor.disconnect(); } catch (e) {}
       this.processor = null;
@@ -317,135 +308,6 @@ export class LiveSessionManager {
     }
     
     this.onStateChange("idle");
-  }
-
-  public isScreenSharing(): boolean {
-    return !!this.screenStream;
-  }
-
-  public getShareMode(): "screen" | "camera" | "none" {
-    return this.activeShareMode;
-  }
-
-  async startScreenShare() {
-    if (this.screenStream) return;
-    try {
-      let mode: "screen" | "camera" = "screen";
-
-      // 1. Check if navigator.mediaDevices exists
-      if (!navigator.mediaDevices) {
-        throw new Error("navigator.mediaDevices is not available. Please verify this app is running in a secure context (HTTPS/localhost) and that frame permissions are enabled.");
-      }
-
-      // 2. Attempt getDisplayMedia (screen share) first, fallback to getUserMedia (webcam) if unsupported or fails
-      if (typeof navigator.mediaDevices.getDisplayMedia === "function") {
-        try {
-          this.screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-              width: { max: 640 },
-              height: { max: 480 },
-              frameRate: { max: 5 }
-            },
-            audio: false
-          });
-          mode = "screen";
-        } catch (screenError: any) {
-          // If user cancelled, don't fallback to webcam automatically as it might breach trust;
-          // but if it's a permission or system failure, try camera fallback!
-          if (screenError?.name === "NotAllowedError" || screenError?.name === "PermissionDeniedError") {
-            console.log("Screen share permission denied by user; aborting.");
-            throw screenError;
-          }
-          console.warn("getDisplayMedia call failed, attempting camera fallback...", screenError);
-          if (typeof navigator.mediaDevices.getUserMedia === "function") {
-            this.screenStream = await navigator.mediaDevices.getUserMedia({
-              video: {
-                width: { ideal: 320 },
-                height: { ideal: 240 },
-                facingMode: "user"
-              },
-              audio: false
-            });
-            mode = "camera";
-          } else {
-            throw screenError;
-          }
-        }
-      } else if (typeof navigator.mediaDevices.getUserMedia === "function") {
-        console.warn("getDisplayMedia is not available in this environment. Falling back to camera stream.");
-        this.screenStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 320 },
-            height: { ideal: 240 },
-            facingMode: "user"
-          },
-          audio: false
-        });
-        mode = "camera";
-      } else {
-        throw new Error("Neither screen sharing (getDisplayMedia) nor camera streaming (getUserMedia) is supported by this browser context.");
-      }
-
-      const videoTrack = this.screenStream.getVideoTracks()[0];
-      if (!videoTrack) {
-        throw new Error("No video tracks found in captured stream.");
-      }
-      
-      const video = document.createElement("video");
-      video.srcObject = this.screenStream;
-      video.muted = true;
-      video.playsInline = true;
-      video.play().catch(err => console.error("Error playing capture video:", err));
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 320;
-      canvas.height = 240;
-      const ctx = canvas.getContext("2d");
-
-      this.screenInterval = window.setInterval(() => {
-        if (!this.sessionPromise || !ctx || video.paused || video.ended) return;
-        
-        try {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
-          const base64Data = dataUrl.split(",")[1];
-          
-          this.sessionPromise.then(session => {
-            session.sendRealtimeInput({
-              video: { data: base64Data, mimeType: "image/jpeg" }
-            });
-          }).catch(err => console.error("Error sending screen frame:", err));
-        } catch (err) {
-          console.error("Error capturing screen frame:", err);
-        }
-      }, 1500); // 1.5 seconds interval (~0.66 FPS)
-
-      videoTrack.onended = () => {
-        this.stopScreenShare();
-      };
-
-      this.activeShareMode = mode;
-      this.onScreenShareActive(true, mode);
-    } catch (err) {
-      console.error("Failed to start visual share:", err);
-      this.stopScreenShare();
-      throw err;
-    }
-  }
-
-  stopScreenShare() {
-    if (this.screenInterval) {
-      clearInterval(this.screenInterval);
-      this.screenInterval = null;
-    }
-    if (this.screenStream) {
-      try {
-        this.screenStream.getTracks().forEach(t => t.stop());
-      } catch (e) {}
-      this.screenStream = null;
-    }
-    this.activeShareMode = "none";
-    this.onScreenShareActive(false, "none");
   }
 
   sendText(text: string) {
