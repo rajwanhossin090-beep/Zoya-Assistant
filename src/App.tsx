@@ -134,6 +134,7 @@ export default function App() {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [shareMode, setShareMode] = useState<"screen" | "camera" | "none">("none");
 
   const [zoyaMood, setZoyaMood] = useState<ZoyaMood>(() => {
     const saved = localStorage.getItem("zoya_mood");
@@ -361,6 +362,7 @@ export default function App() {
     if (isSessionActive) {
       setIsSessionActive(false);
       setIsScreenSharing(false);
+      setShareMode("none");
       if (liveSessionRef.current) {
         liveSessionRef.current.stop();
         liveSessionRef.current = null;
@@ -387,6 +389,7 @@ export default function App() {
         session.onClose = () => {
           setIsSessionActive(false);
           setIsScreenSharing(false);
+          setShareMode("none");
           setAppState("idle");
           liveSessionRef.current = null;
         };
@@ -395,8 +398,9 @@ export default function App() {
           triggerBrowserAction(url, "Command triggered from voice session");
         };
 
-        session.onScreenShareActive = (active) => {
+        session.onScreenShareActive = (active, mode) => {
           setIsScreenSharing(active);
+          setShareMode(mode);
         };
  
         await session.start();
@@ -405,6 +409,7 @@ export default function App() {
         setShowPermissionModal(true);
         setIsSessionActive(false);
         setIsScreenSharing(false);
+        setShareMode("none");
         setAppState("idle");
       }
     }

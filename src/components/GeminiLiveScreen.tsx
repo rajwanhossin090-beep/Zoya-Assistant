@@ -32,6 +32,7 @@ interface GeminiLiveScreenProps {
   sassLevel: number;
   onSassLevelChange: (level: number) => void;
   isScreenSharing: boolean;
+  shareMode?: "screen" | "camera" | "none";
   onToggleScreenShare: () => void;
 }
 
@@ -48,6 +49,7 @@ export default function GeminiLiveScreen({
   sassLevel,
   onSassLevelChange,
   isScreenSharing,
+  shareMode = "none",
   onToggleScreenShare,
 }: GeminiLiveScreenProps) {
   const [showQuickSettings, setShowQuickSettings] = useState(false);
@@ -299,8 +301,17 @@ export default function GeminiLiveScreen({
             animate={{ opacity: 1, y: 0 }}
             className="mt-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] text-cyan-300 flex items-center gap-1.5 font-semibold tracking-wider uppercase animate-pulse shadow-md"
           >
-            <ScreenShare size={12} className="text-cyan-400" />
-            Live Screen Share Active
+            {shareMode === "camera" ? (
+              <>
+                <Tv size={12} className="text-cyan-400" />
+                Live Camera Feed Active
+              </>
+            ) : (
+              <>
+                <ScreenShare size={12} className="text-cyan-400" />
+                Live Screen Share Active
+              </>
+            )}
           </motion.div>
         )}
 
@@ -370,9 +381,13 @@ export default function GeminiLiveScreen({
             ${isScreenSharing 
               ? "bg-cyan-500/25 border-cyan-500/40 text-cyan-400 animate-pulse" 
               : "bg-white/5 border-white/10 text-white hover:bg-white/10"}`}
-          title={isScreenSharing ? "Stop Screen Share" : "Share Screen"}
+          title={
+            isScreenSharing 
+              ? (shareMode === "camera" ? "Stop Camera Feed" : "Stop Screen Share") 
+              : "Share Screen / Camera"
+          }
         >
-          <ScreenShare size={20} />
+          {shareMode === "camera" ? <Tv size={20} /> : <ScreenShare size={20} />}
         </button>
 
         {/* Button B: Core End Session Action (Glowing Crimson Red Circle) */}
