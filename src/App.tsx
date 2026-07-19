@@ -219,29 +219,6 @@ export default function App() {
       songName: songName || undefined,
       type
     });
-
-    try {
-      if (isNativeScheme) {
-        window.location.href = targetUrl;
-        setTimeout(() => {
-          setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
-        }, 12000);
-      } else {
-        const newWin = window.open(targetUrl, "_blank");
-        if (newWin) {
-          setTimeout(() => {
-            setActiveBrowserAction(prev => prev && prev.url === url ? null : prev);
-          }, 12000);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to open URL:", targetUrl, err);
-      if (targetUrl.startsWith("tel:")) {
-        window.location.href = targetUrl;
-      } else {
-        window.open(targetUrl, "_blank");
-      }
-    }
   }, [hasDialerPermission]);
 
   useEffect(() => {
